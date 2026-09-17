@@ -1,19 +1,7 @@
 package main
 
-import (
-	"net/http"
-
-	"github.com/gin-gonic/gin"
-)
+import "github.com/musiermoore/oksana-vpn-api/internal/router"
 
 func main() {
-	r := gin.Default()
-
-	r.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"status": "ok",
-		})
-	})
-
-	r.Run(":8080")
+	router.StartRouter()
 }
