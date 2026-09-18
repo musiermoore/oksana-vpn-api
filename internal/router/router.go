@@ -1,24 +1,22 @@
 package router
 
 import (
-	"log"
+	"database/sql"
 
 	"github.com/gin-gonic/gin"
 	"github.com/musiermoore/oksana-vpn-api/internal/router/debug"
 )
 
-func StartRouter() {
-	r := newRouter()
+func StartRouter(db *sql.DB) error {
+	r := newRouter(db)
 
-	if err := r.Run(":8080"); err != nil {
-		log.Fatal(err)
-	}
+	return r.Run(":8080")
 }
 
-func newRouter() *gin.Engine {
+func newRouter(db *sql.DB) *gin.Engine {
 	r := gin.Default()
 
-	debug.HealthRoutes(r)
+	debug.HealthRoutes(r, db)
 
 	return r
 }
