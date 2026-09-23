@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/musiermoore/oksana-vpn-api/internal/database/builder"
+	"github.com/musiermoore/oksana-vpn-api/internal/database/builder/query/expression"
 )
 
 type Repository struct {
@@ -58,7 +59,7 @@ func (r *Repository) FindByToken(
 		Select("u.id", "u.name", "u.telegram").
 		InnerJoin("auth_tokens t", "u.id", "=", "t.user_id").
 		Where("t.token_hash", "=", hash[:]).
-		Where("t.expires_at", ">", builder.Raw("UTC_TIMESTAMP(6)")).
+		Where("t.expires_at", ">", expression.Raw("UTC_TIMESTAMP(6)")).
 		First(&user)
 
 	return user, err
