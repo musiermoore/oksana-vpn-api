@@ -1,4 +1,4 @@
-package orm
+package builder
 
 import (
 	"context"
@@ -41,6 +41,11 @@ type OrderBy struct {
 
 type GroupBy struct {
 	column string
+}
+
+type RawExpression struct {
+	column string
+	args   []any
 }
 
 type Builder struct {
@@ -140,9 +145,9 @@ func (r *Builder) join(
 	r.joins = append(r.joins, Join{
 		joinType:     joinType,
 		table:        table,
-		firstColumn:  r.prepareBinding(firstColumn),
+		firstColumn:  firstColumn,
 		operator:     operator,
-		secondColumn: r.prepareBinding(secondColumn),
+		secondColumn: secondColumn,
 	})
 }
 
@@ -162,7 +167,9 @@ func (r *Builder) where(boolean, column, operator string, value any) *Builder {
 		boolean:  boolean,
 	})
 
-	r.args = append(r.args, value)
+	if _, ok := value.(RawExpression); !ok {
+		r.args = append(r.args, value)
+	}
 
 	return r
 }
@@ -246,12 +253,30 @@ func (r *Builder) List(dest any) error {
 	return rows.Err()
 }
 
+func (r *Builder) Insert(value any) error {
+	columns, values, err := insertValues(value)
+	if err != nil {
+		return err
+	}
+
+	_, err = r.db.ExecContext(
+		r.ctx,
+		r.buildInsertQuery(columns),
+		values...,
+	)
+
+	return err
+}
+
 func (r *Builder) queryContext() (*sql.Rows, error) {
 	rows, err := r.db.QueryContext(
 		r.ctx,
 		r.buildSelectQuery(),
 		r.args...,
 	)
+
+	fmt.Println(r.buildSelectQuery(), r.args)
+
 	if err != nil {
 		return nil, err
 	}
@@ -264,6 +289,7 @@ func (r *Builder) buildSelectQuery() string {
 
 	query = append(query, "SELECT")
 	query = append(query, r.buildSelect())
+
 	query = append(query, "FROM")
 	query = append(query, r.table)
 
@@ -294,14 +320,64 @@ func (r *Builder) buildSelectQuery() string {
 	return strings.Join(query, " ")
 }
 
+func (r *Builder) buildInsertQuery(columns []string) string {
+	placeholders := make([]string, len(columns))
+
+	for i := range placeholders {
+		placeholders[i] = "?"
+	}
+
+	return fmt.Sprintf(
+		"INSERT INTO %s (%s) VALUES (%s)",
+		r.table,
+		strings.Join(columns, ", "),
+		strings.Join(placeholders, ", "),
+	)
+}
+
 func (r *Builder) buildSelect() string {
+	if len(r.selectRows) == 0 {
+		return "*"
+	}
+
 	var rows []string
 
 	for _, row := range r.selectRows {
-		rows = append(rows, fmt.Sprintf(`%s`, row))
+		rows = append(rows, row)
 	}
 
 	return strings.Join(rows, ", ")
+}
+
+func insertValues(value any) ([]string, []any, error) {
+	v := reflect.ValueOf(value)
+
+	if v.Kind() == reflect.Pointer {
+		v = v.Elem()
+	}
+
+	if v.Kind() != reflect.Struct {
+		return nil, nil, fmt.Errorf("value must be a struct")
+	}
+
+	t := v.Type()
+
+	var columns []string
+	var values []any
+
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		column := field.Tag.Get("db")
+
+		if column == "" || column == "-" {
+			continue
+		}
+
+		columns = append(columns, column)
+		values = append(values, v.Field(i).Interface())
+	}
+
+	return columns, values, nil
 }
 
 func (r *Builder) buildJoins() string {
@@ -309,8 +385,8 @@ func (r *Builder) buildJoins() string {
 }
 
 func (r *Builder) buildJoin(join Join) string {
-	return r.bindings(
-		`%s JOIN %s ON %s %s %s`,
+	return r.formatArgs(
+		"%s JOIN %s ON %s %s %s",
 		join.joinType,
 		join.table,
 		join.firstColumn,
@@ -336,7 +412,16 @@ func (r *Builder) buildWheres() string {
 }
 
 func (r *Builder) buildWhere(where Where) string {
-	return r.formatArgs(
+	if raw, ok := where.value.(RawExpression); ok {
+		return fmt.Sprintf(
+			"%s %s %s",
+			where.column,
+			where.operator,
+			raw.column,
+		)
+	}
+
+	return fmt.Sprintf(
 		"%s %s ?",
 		where.column,
 		where.operator,
@@ -348,7 +433,7 @@ func (r *Builder) buildOrderBys() string {
 }
 
 func (r *Builder) buildOrderBy(orderBy OrderBy) string {
-	return r.bindings(`? ?`,
+	return r.bindings("? ?",
 		orderBy.column,
 		getAscending(orderBy.ascending),
 	)
@@ -377,7 +462,10 @@ func (r *Builder) formatArgs(str string, args ...any) string {
 }
 
 func (r *Builder) bindings(str string, args ...any) string {
-	fmt.Println(strings.ReplaceAll(str, "?", "%s"))
+	if len(args) == 0 {
+		return str
+	}
+
 	return fmt.Sprintf(strings.ReplaceAll(str, "?", "%s"), r.prepareBindings(args)...)
 }
 
@@ -393,6 +481,10 @@ func (r *Builder) prepareBindings(args ...any) []any {
 
 func (r *Builder) prepareBinding(arg any) string {
 	switch v := arg.(type) {
+
+	case RawExpression:
+		return r.bindings(v.column, v.args...)
+
 	case int:
 		return strconv.Itoa(v)
 	case int8:
@@ -494,4 +586,11 @@ func scanStruct(rows *sql.Rows, dest any) error {
 	}
 
 	return rows.Scan(scanArgs...)
+}
+
+func Raw(column string, args ...any) RawExpression {
+	return RawExpression{
+		column: column,
+		args:   args,
+	}
 }

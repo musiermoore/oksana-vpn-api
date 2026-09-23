@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/musiermoore/oksana-vpn-api/internal/database/orm"
+	"github.com/musiermoore/oksana-vpn-api/internal/database/builder"
 )
 
 type Repository struct {
@@ -22,7 +22,7 @@ func (r *Repository) FindByTelegram(
 ) (User, error) {
 	var user User
 
-	err := orm.Query(r.db, ctx).
+	err := builder.Query(r.db, ctx).
 		Table("users").
 		Select("id", "name", "telegram", "password").
 		Where("telegram", "=", "@"+telegram).
@@ -37,18 +37,14 @@ func (r *Repository) CreateToken(
 	hash [32]byte,
 	expiresAt time.Time,
 ) error {
-	_, err := r.db.ExecContext(
-		ctx,
-		`INSERT INTO auth_tokens
-         (token_hash, user_id, expires_at, created_at)
-         VALUES (?, ?, ?, ?)`,
-		hash[:],
-		userID,
-		expiresAt.UTC(),
-		time.Now().UTC(),
-	)
-
-	return err
+	return builder.Query(r.db, ctx).
+		Table("auth_tokens").
+		Insert(AuthToken{
+			TokenHash: hash[:],
+			UserId:    userID,
+			ExpiresAt: expiresAt.UTC(),
+			CreatedAt: time.Now().UTC(),
+		})
 }
 
 func (r *Repository) FindByToken(
@@ -57,19 +53,13 @@ func (r *Repository) FindByToken(
 ) (User, error) {
 	var user User
 
-	err := r.db.QueryRowContext(
-		ctx,
-		`SELECT u.id, u.name, u.telegram
-         FROM auth_tokens t
-         JOIN users u ON u.id = t.user_id
-         WHERE t.token_hash = ?
-           AND t.expires_at > UTC_TIMESTAMP(6)`,
-		hash[:],
-	).Scan(
-		&user.ID,
-		&user.Name,
-		&user.Telegram,
-	)
+	err := builder.Query(r.db, ctx).
+		Table("users u").
+		Select("u.id", "u.name", "u.telegram").
+		InnerJoin("auth_tokens t", "u.id", "=", "t.user_id").
+		Where("t.token_hash", "=", hash[:]).
+		Where("t.expires_at", ">", builder.Raw("UTC_TIMESTAMP(6)")).
+		First(&user)
 
 	return user, err
 }
