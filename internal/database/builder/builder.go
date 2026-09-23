@@ -54,6 +54,10 @@ func (r *Builder) GetOrderBy() []orderby.OrderBy {
 }
 
 func (r *Builder) GetLimit() int {
+	if !r.hasLimit {
+		return -1
+	}
+
 	return r.limit
 }
 
@@ -181,6 +185,7 @@ func (r *Builder) OrderBy(
 
 func (r *Builder) Limit(limit int) *Builder {
 	r.limit = limit
+	r.hasLimit = true
 
 	return r
 }
@@ -256,6 +261,16 @@ func (r *Builder) Insert(value any) error {
 		r.ctx,
 		r.buildInsertQuery(columns),
 		values...,
+	)
+
+	return err
+}
+
+func (r *Builder) Delete() error {
+	_, err := r.db.ExecContext(
+		r.ctx,
+		r.buildDeleteQuery(),
+		r.GetArgs()...,
 	)
 
 	return err

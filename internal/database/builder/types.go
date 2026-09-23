@@ -21,8 +21,10 @@ type Builder struct {
 
 	groupBy []groupby.GroupBy
 	orderBy []orderby.OrderBy
-	limit   int
-	offset  int
+
+	hasLimit bool
+	limit    int
+	offset   int
 
 	args []any
 }

@@ -49,18 +49,18 @@ func (builder *Builder) buildSelectQuery() string {
 		query = append(query, "ORDER BY", orderby.BuildOrderBys(builder.GetOrderBy()))
 	}
 
-	if builder.GetLimit() > 0 {
+	if builder.GetLimit() >= 0 {
 		query = append(query, "LIMIT", strconv.Itoa(builder.GetLimit()))
 	}
 
-	if builder.GetOffset() > 0 {
+	if builder.GetOffset() >= 0 {
 		query = append(query, "OFFSET", strconv.Itoa(builder.GetOffset()))
 	}
 
 	return strings.Join(query, " ")
 }
 
-func (r *Builder) buildInsertQuery(columns []string) string {
+func (builder *Builder) buildInsertQuery(columns []string) string {
 	placeholders := make([]string, len(columns))
 
 	for i := range placeholders {
@@ -69,8 +69,28 @@ func (r *Builder) buildInsertQuery(columns []string) string {
 
 	return fmt.Sprintf(
 		"INSERT INTO %s (%s) VALUES (%s)",
-		r.table,
+		builder.table,
 		strings.Join(columns, ", "),
 		strings.Join(placeholders, ", "),
 	)
+}
+
+func (builder *Builder) buildDeleteQuery() string {
+	var query []string
+
+	query = append(query, "DELETE FROM", builder.GetTable())
+
+	if len(builder.GetWheres()) > 0 {
+		query = append(query, "WHERE", where.BuildWheres(builder.GetWheres()))
+	}
+
+	if len(builder.GetOrderBy()) > 0 {
+		query = append(query, "ORDER BY", orderby.BuildOrderBys(builder.GetOrderBy()))
+	}
+
+	if builder.GetLimit() >= 0 {
+		query = append(query, "LIMIT", strconv.Itoa(builder.GetLimit()))
+	}
+
+	return strings.Join(query, " ")
 }

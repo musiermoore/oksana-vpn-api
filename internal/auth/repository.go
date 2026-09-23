@@ -69,12 +69,10 @@ func (r *Repository) DeleteToken(
 	ctx context.Context,
 	hash [32]byte,
 ) error {
-	_, err := r.db.ExecContext(
-		ctx,
-		`DELETE FROM auth_tokens
-         WHERE token_hash = ?`,
-		hash[:],
-	)
+	err := builder.Query(r.db, ctx).
+		Table("auth_tokens").
+		Where("token_hash", "=", hash[:]).
+		Delete()
 
 	return err
 }
