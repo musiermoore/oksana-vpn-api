@@ -24,7 +24,9 @@ type Builder struct {
 
 	hasLimit bool
 	limit    int
-	offset   int
+
+	hasOffset bool
+	offset    int
 
 	args []any
 }

@@ -1,6 +1,7 @@
 package bindings
 
 import (
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"strings"
@@ -17,7 +18,7 @@ func Bindings(str string, args ...any) string {
 		return str
 	}
 
-	return fmt.Sprintf(strings.ReplaceAll(str, "?", "%s"), prepareBindings(args)...)
+	return fmt.Sprintf(strings.ReplaceAll(str, "?", "%s"), prepareBindings(args...)...)
 }
 
 func prepareBindings(args ...any) []any {
@@ -35,6 +36,12 @@ func prepareBinding(arg any) string {
 
 	case expression.RawExpression:
 		return Bindings(v.Column, v.Args...)
+
+	case []byte:
+		return "X'" + hex.EncodeToString(v) + "'"
+
+	case [32]byte:
+		return "X'" + hex.EncodeToString(v[:]) + "'"
 
 	case int:
 		return strconv.Itoa(v)
