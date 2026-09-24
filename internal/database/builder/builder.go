@@ -11,6 +11,7 @@ import (
 	"github.com/musiermoore/oksana-vpn-api/internal/database/builder/query/insert"
 	"github.com/musiermoore/oksana-vpn-api/internal/database/builder/query/join"
 	"github.com/musiermoore/oksana-vpn-api/internal/database/builder/query/orderby"
+	"github.com/musiermoore/oksana-vpn-api/internal/database/builder/query/update"
 	"github.com/musiermoore/oksana-vpn-api/internal/database/builder/query/where"
 )
 
@@ -19,6 +20,11 @@ func Query(db *sql.DB, ctx context.Context) *Builder {
 		db:  db,
 		ctx: ctx,
 	}
+}
+
+func (r *Builder) Clone() *Builder {
+	clone := *r
+	return &clone
 }
 
 func (r *Builder) GetDb() *sql.DB {
@@ -54,10 +60,6 @@ func (r *Builder) GetOrderBy() []orderby.OrderBy {
 }
 
 func (r *Builder) GetLimit() int {
-	if !r.hasLimit {
-		return -1
-	}
-
 	return r.limit
 }
 
@@ -209,7 +211,7 @@ func (r *Builder) GroupBy(
 func (r *Builder) First(dest any) error {
 	r.Limit(1)
 
-	rows, err := r.QueryContext()
+	rows, err := r.queryContext()
 	if err != nil {
 		return err
 	}
@@ -223,7 +225,7 @@ func (r *Builder) First(dest any) error {
 }
 
 func (r *Builder) List(dest any) error {
-	rows, err := r.QueryContext()
+	rows, err := r.queryContext()
 	if err != nil {
 		return err
 	}
@@ -257,66 +259,29 @@ func (r *Builder) Insert(value any) error {
 		return err
 	}
 
-	_, err = r.db.ExecContext(
-		r.ctx,
+	return r.execContext(
 		r.buildInsertQuery(columns),
-		values...,
+		values,
 	)
-
-	return err
 }
 
-func (r *Builder) Delete() error {
-	_, err := r.db.ExecContext(
-		r.ctx,
-		r.buildDeleteQuery(),
-		r.GetArgs()...,
-	)
-
-	return err
-}
-
-func scanStruct(rows *sql.Rows, dest any) error {
-	value := reflect.ValueOf(dest)
-
-	if value.Kind() != reflect.Pointer || value.Elem().Kind() != reflect.Struct {
-		return fmt.Errorf("destination must be a pointer to struct")
-	}
-
-	value = value.Elem()
-	typeOf := value.Type()
-
-	fields := make(map[string]int)
-
-	for i := 0; i < typeOf.NumField(); i++ {
-		field := typeOf.Field(i)
-		column := field.Tag.Get("db")
-
-		if column == "" || column == "-" {
-			continue
-		}
-
-		fields[column] = i
-	}
-
-	columns, err := rows.Columns()
+func (r *Builder) Update(value any, updatedColumns ...string) error {
+	columns, values, err := update.UpdateValues(value, updatedColumns)
 	if err != nil {
 		return err
 	}
 
-	scanArgs := make([]any, len(columns))
+	values = append(values, r.GetArgs()...)
 
-	for i, column := range columns {
-		fieldIndex, ok := fields[column]
-		if !ok {
-			return fmt.Errorf("no field found for column %q", column)
-		}
+	return r.execContext(
+		r.buildUpdateQuery(columns),
+		values,
+	)
+}
 
-		scanArgs[i] = value.
-			Field(fieldIndex).
-			Addr().
-			Interface()
-	}
-
-	return rows.Scan(scanArgs...)
+func (r *Builder) Delete() error {
+	return r.execContext(
+		r.buildDeleteQuery(),
+		r.GetArgs(),
+	)
 }
