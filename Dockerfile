@@ -7,13 +7,18 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -o /app/api ./cmd/api
+RUN CGO_ENABLED=0 GOOS=linux go build -o /out/api ./cmd/api
+RUN go install github.com/pressly/goose/v3/cmd/goose@latest
+
 
 FROM alpine:3.22
 
 WORKDIR /app
 
-COPY --from=builder /app/api ./api
+COPY --from=builder /out/api ./api
+COPY --from=builder /go/bin/goose /usr/local/bin/goose
+
+COPY migrations ./migrations
 
 EXPOSE 8080
 
