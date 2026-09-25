@@ -15,6 +15,7 @@ import (
 var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrInvalidToken       = errors.New("invalid token")
+	ErrTokenCreation      = errors.New("failed to create token")
 )
 
 type Service struct {
@@ -40,7 +41,7 @@ func (s *Service) Login(
 	telegram string,
 	password string,
 ) (string, time.Time, error) {
-	user, err := s.repo.FindByTelegram(ctx, telegram)
+	user, err := s.GetUserByTelegram(ctx, telegram)
 
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", time.Time{}, ErrInvalidCredentials
@@ -59,29 +60,10 @@ func (s *Service) Login(
 		return "", time.Time{}, ErrInvalidCredentials
 	}
 
-	// Generate 32 cryptographically secure random bytes.
-	raw := make([]byte, 32)
-
-	if _, err := rand.Read(raw); err != nil {
-		return "", time.Time{}, err
-	}
-
-	token := base64.RawURLEncoding.EncodeToString(raw)
-
-	// Never store the original token.
-	hash := sha256.Sum256(raw)
-
-	expiresAt := time.Now().UTC().Add(30 * 24 * time.Hour)
-
-	err = s.repo.CreateToken(
-		ctx,
-		user.ID,
-		hash,
-		expiresAt,
-	)
+	token, expiresAt, err := s.CreateToken(ctx, user)
 
 	if err != nil {
-		return "", time.Time{}, err
+		return "", time.Time{}, ErrTokenCreation
 	}
 
 	return token, expiresAt, nil
@@ -117,4 +99,43 @@ func (s *Service) Logout(
 	}
 
 	return s.repo.DeleteToken(ctx, hash)
+}
+
+func (service *Service) GetUserByTelegram(
+	ctx context.Context,
+	telegram string,
+) (User, error) {
+	return service.repo.FindByTelegram(ctx, telegram)
+}
+
+func (service *Service) CreateToken(
+	ctx context.Context,
+	user User,
+) (string, time.Time, error) {
+	// Generate 32 cryptographically secure random bytes.
+	raw := make([]byte, 32)
+
+	if _, err := rand.Read(raw); err != nil {
+		return "", time.Time{}, err
+	}
+
+	token := base64.RawURLEncoding.EncodeToString(raw)
+
+	// Never store the original token.
+	hash := sha256.Sum256(raw)
+
+	expiresAt := time.Now().UTC().Add(30 * 24 * time.Hour)
+
+	err := service.repo.CreateToken(
+		ctx,
+		user.ID,
+		hash,
+		expiresAt,
+	)
+
+	if err != nil {
+		return "", time.Time{}, err
+	}
+
+	return token, expiresAt, nil
 }
