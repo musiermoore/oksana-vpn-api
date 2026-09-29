@@ -9,7 +9,5 @@ services:
       - oksana-vpn
 
 networks:
-  app:
-      driver: bridge
   oksana-vpn:
       external: true
