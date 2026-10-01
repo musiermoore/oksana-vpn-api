@@ -6,7 +6,9 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -26,14 +28,16 @@ func NewService(repo *Repository) *Service {
 	return &Service{repo: repo}
 }
 
-func tokenHash(token string) ([32]byte, error) {
+func tokenHash(token string) (string, error) {
 	raw, err := base64.RawURLEncoding.DecodeString(token)
 
 	if err != nil || len(raw) != 32 {
-		return [32]byte{}, ErrInvalidToken
+		return "", ErrInvalidToken
 	}
 
-	return sha256.Sum256(raw), nil
+	sum := sha256.Sum256([]byte(token))
+
+	return hex.EncodeToString(sum[:]), nil
 }
 
 func (s *Service) Login(
@@ -79,10 +83,17 @@ func (s *Service) Authenticate(
 		return User{}, err
 	}
 
+	fmt.Println(hash)
 	user, err := s.repo.FindByToken(ctx, hash)
 
 	if errors.Is(err, sql.ErrNoRows) {
 		return User{}, ErrInvalidToken
+	}
+
+	err = s.repo.UpdateLastUsedAt(ctx, hash)
+
+	if err != nil {
+		fmt.Println(fmt.Errorf("WARNING: last_used_at failed to update. Error: %s", err))
 	}
 
 	return user, err
@@ -122,14 +133,15 @@ func (service *Service) CreateToken(
 	token := base64.RawURLEncoding.EncodeToString(raw)
 
 	// Never store the original token.
-	hash := sha256.Sum256(raw)
+	hash := sha256.Sum256([]byte(token))
+	storedHash := hex.EncodeToString(hash[:])
 
 	expiresAt := time.Now().UTC().Add(30 * 24 * time.Hour)
 
 	err := service.repo.CreateToken(
 		ctx,
 		user.ID,
-		hash,
+		storedHash,
 		expiresAt,
 	)
 

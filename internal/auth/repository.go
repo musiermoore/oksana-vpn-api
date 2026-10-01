@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
 	"github.com/musiermoore/oksana-vpn-api/internal/database/builder"
@@ -24,7 +25,7 @@ func (r *Repository) FindByTelegram(
 	var user User
 
 	err := builder.Query(r.db, ctx).
-		Table("users").
+		Table(USERS_TABLE).
 		Select("id", "name", "telegram", "password").
 		Where("telegram", "=", "@"+telegram).
 		First(&user)
@@ -35,30 +36,32 @@ func (r *Repository) FindByTelegram(
 func (r *Repository) CreateToken(
 	ctx context.Context,
 	userID int64,
-	hash [32]byte,
+	hash string,
 	expiresAt time.Time,
 ) error {
 	return builder.Query(r.db, ctx).
-		Table("auth_tokens").
+		Table(AUTH_TOKENS_TABLE).
 		Insert(AuthToken{
-			TokenHash: hash[:],
-			UserId:    userID,
-			ExpiresAt: expiresAt.UTC(),
-			CreatedAt: time.Now().UTC(),
+			TokenHash:  hash,
+			UserId:     userID,
+			ExpiresAt:  expiresAt.UTC(),
+			LastUsedAt: time.Now().UTC(),
+			CreatedAt:  time.Now().UTC(),
+			UpdatedAt:  time.Now().UTC(),
 		})
 }
 
 func (r *Repository) FindByToken(
 	ctx context.Context,
-	hash [32]byte,
+	hash string,
 ) (User, error) {
 	var user User
 
 	err := builder.Query(r.db, ctx).
-		Table("users u").
+		Table(fmt.Sprintf("%s u", USERS_TABLE)).
 		Select("u.id", "u.name", "u.telegram").
-		InnerJoin("auth_tokens t", "u.id", "=", "t.user_id").
-		Where("t.token_hash", "=", hash[:]).
+		InnerJoin(fmt.Sprintf("%s t", AUTH_TOKENS_TABLE), "u.id", "=", "t.user_id").
+		Where("t.token_hash", "=", hash).
 		Where("t.expires_at", ">", expression.Raw("UTC_TIMESTAMP(6)")).
 		First(&user)
 
@@ -67,12 +70,24 @@ func (r *Repository) FindByToken(
 
 func (r *Repository) DeleteToken(
 	ctx context.Context,
-	hash [32]byte,
+	hash string,
 ) error {
 	err := builder.Query(r.db, ctx).
-		Table("auth_tokens").
-		Where("token_hash", "=", hash[:]).
+		Table(AUTH_TOKENS_TABLE).
+		Where("token_hash", "=", hash).
 		Delete()
+
+	return err
+}
+
+func (r *Repository) UpdateLastUsedAt(ctx context.Context, hash string) error {
+	err := builder.Query(r.db, ctx).
+		Table(AUTH_TOKENS_TABLE).
+		Where("token_hash", "=", hash).
+		Update(AuthToken{
+			LastUsedAt: time.Now().UTC(),
+			UpdatedAt:  time.Now().UTC(),
+		}, "last_used_at", "updated_at")
 
 	return err
 }
