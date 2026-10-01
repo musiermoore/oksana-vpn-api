@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/musiermoore/oksana-vpn-api/internal/database/builder/query/bindings"
 	"github.com/musiermoore/oksana-vpn-api/internal/database/builder/query/expression"
 	"github.com/musiermoore/oksana-vpn-api/internal/database/builder/query/groupby"
 	"github.com/musiermoore/oksana-vpn-api/internal/database/builder/query/insert"
@@ -77,8 +78,32 @@ func (r *Builder) Table(table string) *Builder {
 	return r
 }
 
-func (r *Builder) Select(columns ...string) *Builder {
-	r.selectRows = append(r.selectRows, columns...)
+func (r *Builder) Select(columns ...any) *Builder {
+	var rows []string
+
+	for _, item := range columns {
+		column := ""
+
+		switch v := item.(type) {
+
+		case expression.RawExpression:
+			column = bindings.Bindings(v.Column, v.Args...)
+		case string:
+			column = v
+		default:
+			column = ""
+		}
+
+		if column == "" {
+			panic(fmt.Errorf("Invalid column: %s", item))
+
+			continue
+		}
+
+		rows = append(rows, column)
+	}
+
+	r.selectRows = append(r.selectRows, rows...)
 
 	return r
 }

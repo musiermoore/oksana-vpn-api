@@ -33,7 +33,7 @@ func (service *TelegramService) IsValid() (bool, error) {
 	isDateValid := service.isDateValid()
 
 	if !isDateValid {
-		// return false, fmt.Errorf("Telegram Validation Init Data Error: Invalid date")
+		return false, fmt.Errorf("Telegram Validation Init Data Error: Invalid date")
 	}
 
 	values := service.InitData.Raw

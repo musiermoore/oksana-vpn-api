@@ -59,7 +59,20 @@ func (r *Repository) FindByToken(
 
 	err := builder.Query(r.db, ctx).
 		Table(fmt.Sprintf("%s u", USERS_TABLE)).
-		Select("u.id", "u.name", "u.telegram").
+		Select(
+			"u.id",
+			"u.name",
+			"u.telegram",
+			"u.telegram_id",
+			"u.balance",
+			expression.Raw("GREATEST(0, -COALESCE(u.balance, 0)) AS debt"),
+			"u.is_admin",
+			expression.Raw("CASE WHEN u.subscription_expires_at IS NOT NULL AND u.subscription_expires_at >= UTC_DATE() THEN 1 ELSE 0 END AS has_active_access"),
+			expression.Raw("0 AS has_vless_wl_configs"),
+			"u.subscription_expires_at",
+			expression.Raw("0 AS has_money_for_next_subscription_month"),
+			"u.password",
+		).
 		InnerJoin(fmt.Sprintf("%s t", AUTH_TOKENS_TABLE), "u.id", "=", "t.user_id").
 		Where("t.token_hash", "=", hash).
 		Where("t.expires_at", ">", expression.Raw("UTC_TIMESTAMP(6)")).
