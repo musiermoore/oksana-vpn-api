@@ -13,6 +13,9 @@ import (
 	"github.com/musiermoore/oksana-vpn-api/internal/telegram/types"
 )
 
+const telegramInitDataMaxAge = 24 * time.Hour
+const telegramInitDataFutureSkew = 2 * time.Minute
+
 type TelegramService struct {
 	InitData types.TelegramInitData
 }
@@ -33,7 +36,7 @@ func (service *TelegramService) IsValid() (bool, error) {
 	isDateValid := service.isDateValid()
 
 	if !isDateValid {
-		return false, fmt.Errorf("Telegram Validation Init Data Error: Invalid date: %d", service.InitData.AuthDate)
+		return false, fmt.Errorf("Telegram Validation Init Data Error: Invalid date")
 	}
 
 	values := service.InitData.Raw
@@ -92,12 +95,12 @@ func (service *TelegramService) getHash(key, data []byte) []byte {
 }
 
 func (service *TelegramService) isDateValid() bool {
-	authTime := time.Unix(service.InitData.AuthDate, 0)
-	now := time.Now()
+	authTime := time.Unix(service.InitData.AuthDate, 0).UTC()
+	now := time.Now().UTC()
 
-	if authTime.After(now) || now.Sub(authTime) > time.Hour {
+	if authTime.After(now.Add(telegramInitDataFutureSkew)) {
 		return false
 	}
 
-	return true
+	return now.Sub(authTime) <= telegramInitDataMaxAge
 }
