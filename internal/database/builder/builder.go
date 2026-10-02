@@ -87,7 +87,11 @@ func (r *Builder) Select(columns ...any) *Builder {
 		switch v := item.(type) {
 
 		case expression.RawExpression:
-			column = bindings.Bindings(v.Column, v.Args...)
+			if len(v.Args) > 0 {
+				column = bindings.Bindings(v.Column, v.Args...)
+			} else {
+				column = v.Column
+			}
 		case string:
 			column = v
 		default:

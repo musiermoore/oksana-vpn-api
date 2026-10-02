@@ -191,7 +191,7 @@ func buildConditions(conditions []Condition) string {
 				prefix,
 				condition.Column,
 				condition.Operator,
-				condition.Value,
+				formatValue(condition.Value),
 			))
 
 		case ConditionTypeRaw:
@@ -213,4 +213,21 @@ func buildConditions(conditions []Condition) string {
 	return strings.ConcatStrings(parts, " ", func(part string) string {
 		return part
 	})
+}
+
+func formatValue(value any) string {
+	switch value := value.(type) {
+	case expression.RawExpression:
+		return value.Column // or value.String(), depending on your type
+	case bool:
+		if value {
+			return "1"
+		}
+
+		return "0"
+	case string:
+		return bindings.FormatArgs("?", value) // only if this also adds binding
+	default:
+		return bindings.FormatArgs("?", value)
+	}
 }

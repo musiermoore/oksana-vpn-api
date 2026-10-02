@@ -10,6 +10,10 @@ import (
 )
 
 func FormatArgs(str string, args ...any) string {
+	if len(args) == 0 {
+		return str
+	}
+
 	return fmt.Sprintf(str, args...)
 }
 
