@@ -80,14 +80,12 @@ func (s *Service) Authenticate(
 	hash, err := tokenHash(token)
 
 	if err != nil {
-		fmt.Println(fmt.Sprintf("Hash: %s. Err: %s", err), hash)
 		return User{}, err
 	}
 
 	user, err := s.repo.FindByToken(ctx, hash)
 
 	if errors.Is(err, sql.ErrNoRows) {
-		fmt.Println(fmt.Sprintf("No user: %s. Err: %s", hash, err))
 		return User{}, ErrInvalidToken
 	}
 

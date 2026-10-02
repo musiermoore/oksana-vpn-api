@@ -22,14 +22,13 @@ func (service *TelegramService) AuthorizeByInitData(c *gin.Context) {
 	var req types.TelegramAuthRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		fmt.Println(fmt.Sprintf("Request Error: %s", err), req)
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "invalid request",
 		})
 		return
 	}
 
-	data, err := parseInitData(req.Data)
+	data, err := parseInitData(req.InitData)
 
 	if err != nil {
 		fmt.Println("Telegarm Auth Error: ", err)

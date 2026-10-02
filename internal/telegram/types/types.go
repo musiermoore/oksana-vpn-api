@@ -23,5 +23,5 @@ type TelegramInitData struct {
 }
 
 type TelegramAuthRequest struct {
-	Data string `json:"data" binding:"required"`
+	InitData string `json:"init_data" binding:"required"`
 }

@@ -2,7 +2,6 @@ package auth
 
 import (
 	"errors"
-	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -31,8 +30,6 @@ func RequireAuth(service *Service) gin.HandlerFunc {
 			c.Request.Context(),
 			token,
 		)
-
-		fmt.Println(user, err)
 
 		if errors.Is(err, ErrInvalidToken) {
 			c.AbortWithStatusJSON(
