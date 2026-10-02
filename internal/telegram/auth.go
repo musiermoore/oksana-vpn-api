@@ -75,8 +75,11 @@ func (service *TelegramService) AuthorizeByInitData(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"status":       true,
-		"access_token": token,
-		"expires_at":   expiresAt,
+		"token":       token,
+		"expires_at":  expiresAt,
+		"id":          user.ID,
+		"name":        user.Name,
+		"telegram":    user.Telegram,
+		"telegram_id": user.TelegramID,
 	})
 }
