@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"database/sql"
 	"time"
 )
 
@@ -20,7 +21,7 @@ type User struct {
 	SubscriptionExpiresAt            *string `json:"subscription_expires_at" db:"subscription_expires_at"`
 	HasMoneyForNextSubscriptionMonth bool    `json:"has_money_for_next_subscription_month" db:"has_money_for_next_subscription_month"`
 
-	PasswordHash string `json:"-" db:"password"`
+	PasswordHash sql.NullString `json:"-" db:"password"`
 }
 
 type AuthToken struct {
