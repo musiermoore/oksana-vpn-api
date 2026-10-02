@@ -3,6 +3,7 @@ package telegram
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/musiermoore/oksana-vpn-api/internal/auth"
@@ -51,7 +52,7 @@ func (service *TelegramService) AuthorizeByInitData(c *gin.Context) {
 		return
 	}
 
-	user, err := service.AuthService.GetUserByTelegram(c, data.User.Username)
+	user, err := service.AuthService.GetUserByTelegramId(c, strconv.FormatInt(data.User.ID, 10))
 
 	if err != nil {
 		fmt.Println("Telegarm Auth Error: ", err)

@@ -118,6 +118,13 @@ func (service *Service) GetUserByTelegram(
 	return service.repo.FindByTelegram(ctx, telegram)
 }
 
+func (service *Service) GetUserByTelegramId(
+	ctx context.Context,
+	telegram string,
+) (User, error) {
+	return service.repo.FindByTelegramId(ctx, telegram)
+}
+
 func (service *Service) CreateToken(
 	ctx context.Context,
 	user User,

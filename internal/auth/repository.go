@@ -8,6 +8,7 @@ import (
 
 	"github.com/musiermoore/oksana-vpn-api/internal/database/builder"
 	"github.com/musiermoore/oksana-vpn-api/internal/database/builder/query/expression"
+	"github.com/musiermoore/oksana-vpn-api/internal/database/builder/query/join"
 )
 
 type Repository struct {
@@ -28,6 +29,26 @@ func (r *Repository) FindByTelegram(
 		Table(USERS_TABLE).
 		Select("id", "name", "telegram", "password").
 		Where("telegram", "=", "@"+telegram).
+		First(&user)
+
+	return user, err
+}
+
+func (r *Repository) FindByTelegramId(
+	ctx context.Context,
+	id string,
+) (User, error) {
+	var user User
+
+	err := builder.Query(r.db, ctx).
+		Table(USERS_TABLE).
+		Select(
+			"id",
+			"name",
+			"telegram",
+			"telegram_id",
+		).
+		Where("telegram_id", "=", id).
 		First(&user)
 
 	return user, err
@@ -67,15 +88,31 @@ func (r *Repository) FindByToken(
 			"u.balance",
 			expression.Raw("GREATEST(0, -COALESCE(u.balance, 0)) AS debt"),
 			"u.is_admin",
-			expression.Raw("CASE WHEN u.subscription_expires_at IS NOT NULL AND u.subscription_expires_at >= UTC_DATE() THEN 1 ELSE 0 END AS has_active_access"),
-			expression.Raw("0 AS has_vless_wl_configs"),
+			expression.Raw("u.subscription_expires_at IS NOT NULL AND u.subscription_expires_at > UTC_TIMESTAMP() AS has_active_access"),
+			expression.Raw("COUNT(IFNULL(vesc.id, 0)) > 0 AS has_vless_wl_configs")
+			expression.Raw(
+				`u.subscription_expires_at IS NOT NULL 
+				AND u.subscription_expires_at > DATE_ADD(UTC_TIMESTAMP(), INTERVAL 1 MONTH) AS has_money_for_next_subscription_month`,
+			),
 			"u.subscription_expires_at",
-			expression.Raw("0 AS has_money_for_next_subscription_month"),
-			"u.password",
 		).
 		InnerJoin(fmt.Sprintf("%s t", AUTH_TOKENS_TABLE), "u.id", "=", "t.user_id").
+		LeftJoinGroup("vless_external_subscriptions ves", func(j *join.Builder) {
+			j.Where("ves.is_active", "=", true)
+			j.Where("ves.include_in_whitelist", "=", true)
+			j.OnGroup(func(j *join.Builder) {
+				j.On("u.is_admin", "=", "1")
+				j.OrOn("ves.is_ready", "=", "1")
+			})
+			j.OnGroup(func(j *join.Builder) {
+				j.Where("ves.is_free", "=", true)
+				j.OrWhere("u.subscription_expires_at", ">", expression.Raw("UTC_TIMESTAMP()"))
+			})
+		}).
+		LeftJoin("vless_external_subscription_configs vesc", "vesc.vless_external_subscription_id", "=", "ves.id").
 		Where("t.token_hash", "=", hash).
 		Where("t.expires_at", ">", expression.Raw("UTC_TIMESTAMP(6)")).
+		GroupBy("u.id").
 		First(&user)
 
 	return user, err
