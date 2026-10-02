@@ -89,7 +89,7 @@ func (r *Repository) FindByToken(
 			expression.Raw("GREATEST(0, -COALESCE(u.balance, 0)) AS debt"),
 			"u.is_admin",
 			expression.Raw("u.subscription_expires_at IS NOT NULL AND u.subscription_expires_at > UTC_TIMESTAMP() AS has_active_access"),
-			expression.Raw("COUNT(IFNULL(vesc.id, 0)) > 0 AS has_vless_wl_configs"),
+			expression.Raw("COUNT(vesc.id) > 0 AS has_vless_wl_configs"),
 			expression.Raw(
 				`u.subscription_expires_at IS NOT NULL 
 				AND u.subscription_expires_at > DATE_ADD(UTC_TIMESTAMP(), INTERVAL 1 MONTH) AS has_money_for_next_subscription_month`,
@@ -101,8 +101,8 @@ func (r *Repository) FindByToken(
 			j.Where("ves.is_active", "=", true)
 			j.Where("ves.include_in_whitelist", "=", true)
 			j.OnGroup(func(j *join.Builder) {
-				j.On("u.is_admin", "=", "1")
-				j.OrOn("ves.is_ready", "=", "1")
+				j.Where("u.is_admin", "=", true)
+				j.OrWhere("ves.is_ready", "=", true)
 			})
 			j.OnGroup(func(j *join.Builder) {
 				j.Where("ves.is_free", "=", true)

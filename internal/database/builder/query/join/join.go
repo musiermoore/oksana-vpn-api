@@ -117,7 +117,7 @@ func (b *Builder) addGroup(boolean string, callback func(*Builder)) *Builder {
 func (b *Builder) Where(column string, operator string, value any) *Builder {
 	b.conditions = append(b.conditions, Condition{
 		Boolean:  "AND",
-		Type:     ConditionTypeRaw,
+		Type:     ConditionTypeValue,
 		Column:   column,
 		Operator: operator,
 		Value:    value,
@@ -129,7 +129,7 @@ func (b *Builder) Where(column string, operator string, value any) *Builder {
 func (b *Builder) OrWhere(column string, operator string, value any) *Builder {
 	b.conditions = append(b.conditions, Condition{
 		Boolean:  "OR",
-		Type:     ConditionTypeRaw,
+		Type:     ConditionTypeValue,
 		Column:   column,
 		Operator: operator,
 		Value:    value,
