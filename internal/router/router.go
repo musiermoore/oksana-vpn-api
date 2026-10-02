@@ -2,7 +2,9 @@ package router
 
 import (
 	"database/sql"
+	"time"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/musiermoore/oksana-vpn-api/internal/auth"
 	"github.com/musiermoore/oksana-vpn-api/internal/router/debug"
@@ -18,6 +20,32 @@ func StartRouter(db *sql.DB) error {
 
 func newRouter(db *sql.DB) *gin.Engine {
 	r := gin.Default()
+
+	r.Use(cors.New(cors.Config{
+		AllowOrigins: []string{
+			"https://panel.oksana1984.ru",
+			"https://public.oksana1984.ru",
+			"https://oksana1984.ru",
+		},
+		AllowMethods: []string{
+			"GET",
+			"POST",
+			"OPTIONS",
+		},
+		AllowHeaders: []string{
+			"Origin",
+			"Content-Type",
+			"Accept",
+			"Authorization",
+			"X-Requested-With",
+			"X-Client-Timezone",
+		},
+		ExposeHeaders: []string{
+			"Content-Length",
+		},
+		AllowCredentials: false,
+		MaxAge:           12 * time.Hour,
+	}))
 
 	debug.HealthRoutes(r, db)
 
