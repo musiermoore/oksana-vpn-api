@@ -175,6 +175,40 @@ func (r *Builder) BaseJoin(
 	})
 }
 
+func (r *Builder) LeftJoinGroup(
+	table string,
+	callback func(*join.Builder),
+) *Builder {
+	r.BaseJoinGroup(join.LeftJoin, table, callback)
+
+	return r
+}
+
+func (r *Builder) InnerJoinGroup(
+	table string,
+	callback func(*join.Builder),
+) *Builder {
+	r.BaseJoinGroup(join.InnerJoin, table, callback)
+
+	return r
+}
+
+func (r *Builder) BaseJoinGroup(
+	joinType join.JoinType,
+	table string,
+	callback func(*join.Builder),
+) {
+	joinBuilder := join.NewBuilder()
+
+	callback(joinBuilder)
+
+	r.joins = append(r.joins, join.Join{
+		JoinType: joinType,
+		Table:    table,
+		Group:    joinBuilder,
+	})
+}
+
 func (r *Builder) Where(column, operator string, value any) *Builder {
 	return r.where("AND", column, operator, value)
 }
