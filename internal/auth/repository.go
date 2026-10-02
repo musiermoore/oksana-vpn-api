@@ -89,7 +89,7 @@ func (r *Repository) FindByToken(
 			expression.Raw("GREATEST(0, -COALESCE(u.balance, 0)) AS debt"),
 			"u.is_admin",
 			expression.Raw("u.subscription_expires_at IS NOT NULL AND u.subscription_expires_at > UTC_TIMESTAMP() AS has_active_access"),
-			expression.Raw("COUNT(IFNULL(vesc.id, 0)) > 0 AS has_vless_wl_configs")
+			expression.Raw("COUNT(IFNULL(vesc.id, 0)) > 0 AS has_vless_wl_configs"),
 			expression.Raw(
 				`u.subscription_expires_at IS NOT NULL 
 				AND u.subscription_expires_at > DATE_ADD(UTC_TIMESTAMP(), INTERVAL 1 MONTH) AS has_money_for_next_subscription_month`,
