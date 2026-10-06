@@ -8,7 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
-	"fmt"
+	"log"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -89,16 +89,16 @@ func (s *Service) Authenticate(
 		return User{}, ErrInvalidToken
 	}
 
-	err = s.repo.UpdateLastUsedAt(ctx, hash)
+	lastUsedAtErr := s.repo.UpdateLastUsedAt(ctx, hash)
 
-	if err != nil {
-		fmt.Println(fmt.Errorf("WARNING: last_used_at failed to update. Error: %s", err))
+	if lastUsedAtErr != nil {
+		log.Printf("WARNING: last_used_at failed to update. Error: %s", lastUsedAtErr)
 	}
 
-	err = s.repo.SetUuid(ctx, user.ID)
-
-	if err != nil {
-		fmt.Println(fmt.Errorf("WARNING: uuid failed to set. Error: %s", err))
+	if user.UUID == "" {
+		if err := s.repo.SetUuid(ctx, user.ID); err != nil {
+			log.Printf("WARNING: uuid failed to set for user %d: %v", user.ID, err)
+		}
 	}
 
 	return user, err
