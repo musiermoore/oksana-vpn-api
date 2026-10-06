@@ -95,6 +95,12 @@ func (s *Service) Authenticate(
 		fmt.Println(fmt.Errorf("WARNING: last_used_at failed to update. Error: %s", err))
 	}
 
+	err = s.repo.SetUuid(ctx, user.ID)
+
+	if err != nil {
+		fmt.Println(fmt.Errorf("WARNING: uuid failed to set. Error: %s", err))
+	}
+
 	return user, err
 }
 

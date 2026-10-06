@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/musiermoore/oksana-vpn-api/internal/database/builder"
 	"github.com/musiermoore/oksana-vpn-api/internal/database/builder/query/expression"
 	"github.com/musiermoore/oksana-vpn-api/internal/database/builder/query/join"
@@ -131,13 +132,20 @@ func (r *Repository) DeleteToken(
 }
 
 func (r *Repository) UpdateLastUsedAt(ctx context.Context, hash string) error {
-	err := builder.Query(r.db, ctx).
+	return builder.Query(r.db, ctx).
 		Table(AUTH_TOKENS_TABLE).
 		Where("token_hash", "=", hash).
 		Update(AuthToken{
 			LastUsedAt: time.Now().UTC(),
 			UpdatedAt:  time.Now().UTC(),
 		}, "last_used_at", "updated_at")
+}
 
-	return err
+func (r *Repository) SetUuid(ctx context.Context, id int64) error {
+	return builder.Query(r.db, ctx).
+		Table(USERS_TABLE).
+		Where("id", "=", id).
+		Update(User{
+			UUID: uuid.New().String(),
+		}, "uuid")
 }

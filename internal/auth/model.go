@@ -10,6 +10,7 @@ const AUTH_TOKENS_TABLE = "telegram_app_tokens"
 
 type User struct {
 	ID                               int64   `json:"id" db:"id"`
+	UUID                             string  `json:"uuid" db:"uuid"`
 	Name                             string  `json:"name" db:"name"`
 	Telegram                         *string `json:"telegram" db:"telegram"`
 	TelegramID                       *string `json:"telegram_id" db:"telegram_id"`
