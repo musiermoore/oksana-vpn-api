@@ -83,6 +83,7 @@ func (r *Repository) FindByToken(
 		Table(fmt.Sprintf("%s u", USERS_TABLE)).
 		Select(
 			"u.id",
+			"u.uuid",
 			"u.name",
 			"u.telegram",
 			"u.telegram_id",
