@@ -16,7 +16,7 @@ import (
 	"github.com/musiermoore/oksana-vpn-api/internal/database/builder/query/where"
 )
 
-func Query(db *sql.DB, ctx context.Context) *Builder {
+func Query(db QueryExecutor, ctx context.Context) *Builder {
 	return &Builder{
 		db:  db,
 		ctx: ctx,
@@ -28,7 +28,7 @@ func (r *Builder) Clone() *Builder {
 	return &clone
 }
 
-func (r *Builder) GetDb() *sql.DB {
+func (r *Builder) GetDb() QueryExecutor {
 	return r.db
 }
 
@@ -258,6 +258,11 @@ func (r *Builder) Limit(limit int) *Builder {
 func (r *Builder) Offset(offset int) *Builder {
 	r.offset = offset
 
+	return r
+}
+
+func (r *Builder) ForUpdate() *Builder {
+	r.forUpdate = true
 	return r
 }
 

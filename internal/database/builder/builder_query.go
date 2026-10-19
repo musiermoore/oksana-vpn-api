@@ -77,6 +77,10 @@ func (builder *Builder) buildSelectQuery() string {
 		query = append(query, "OFFSET", strconv.Itoa(builder.GetOffset()))
 	}
 
+	if builder.forUpdate {
+		query = append(query, "FOR UPDATE")
+	}
+
 	return strings.Join(query, " ")
 }
 

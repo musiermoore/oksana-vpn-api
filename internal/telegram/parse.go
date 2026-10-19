@@ -25,11 +25,12 @@ func parseInitData(data string) (types.TelegramInitData, error) {
 	}
 
 	return types.TelegramInitData{
-		QueryId:   values.Get("query_id"),
-		User:      user,
-		AuthDate:  authDate,
-		Signature: values.Get("signature"),
-		Hash:      values.Get("hash"),
-		Raw:       values,
+		QueryId:    values.Get("query_id"),
+		User:       user,
+		AuthDate:   authDate,
+		StartParam: values.Get("start_param"),
+		Signature:  values.Get("signature"),
+		Hash:       values.Get("hash"),
+		Raw:        values,
 	}, nil
 }

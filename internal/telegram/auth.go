@@ -63,6 +63,14 @@ func (service *TelegramService) AuthorizeByInitData(c *gin.Context) {
 		return
 	}
 
+	if err := service.AuthService.AttachReferral(c.Request.Context(), user, &data.StartParam); err != nil {
+		fmt.Println("Telegram Referral Error: ", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Unable to process referral",
+		})
+		return
+	}
+
 	token, expiresAt, err := service.AuthService.CreateToken(c, user)
 
 	if err != nil {

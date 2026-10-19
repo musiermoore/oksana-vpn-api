@@ -11,7 +11,7 @@ import (
 )
 
 type Builder struct {
-	db  *sql.DB
+	db  QueryExecutor
 	ctx context.Context
 
 	table      string
@@ -27,6 +27,12 @@ type Builder struct {
 
 	hasOffset bool
 	offset    int
+	forUpdate bool
 
 	args []any
+}
+
+type QueryExecutor interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
 }

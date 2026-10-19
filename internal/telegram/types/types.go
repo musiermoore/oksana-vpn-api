@@ -13,11 +13,12 @@ type TelegramUser struct {
 }
 
 type TelegramInitData struct {
-	QueryId   string       `json:"query_id"`
-	User      TelegramUser `json:"user"`
-	AuthDate  int64        `json:"auth_date"`
-	Signature string       `json:"signature"`
-	Hash      string       `json:"hash"`
+	QueryId    string       `json:"query_id"`
+	User       TelegramUser `json:"user"`
+	AuthDate   int64        `json:"auth_date"`
+	StartParam string       `json:"start_param"`
+	Signature  string       `json:"signature"`
+	Hash       string       `json:"hash"`
 
 	Raw url.Values
 }

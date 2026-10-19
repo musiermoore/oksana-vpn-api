@@ -11,6 +11,7 @@ import (
 	"log"
 	"time"
 
+	referralservice "github.com/musiermoore/oksana-vpn-api/internal/services/referral"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -21,11 +22,15 @@ var (
 )
 
 type Service struct {
-	repo *Repository
+	repo      *Repository
+	referrals *referralservice.Service
 }
 
 func NewService(repo *Repository) *Service {
-	return &Service{repo: repo}
+	return &Service{
+		repo:      repo,
+		referrals: referralservice.NewService(referralservice.NewRepository(repo.db)),
+	}
 }
 
 func tokenHash(token string) (string, error) {
@@ -88,6 +93,20 @@ func (s *Service) Authenticate(
 	if errors.Is(err, sql.ErrNoRows) {
 		return User{}, ErrInvalidToken
 	}
+	if err != nil {
+		return User{}, err
+	}
+
+	user.Referral, err = s.referrals.GetSummary(
+		ctx,
+		user.ID,
+		user.ReferrerID,
+		user.JoinAt,
+		user.ReferralAccumulatedDiscountPercent,
+	)
+	if err != nil {
+		return User{}, err
+	}
 
 	lastUsedAtErr := s.repo.UpdateLastUsedAt(ctx, hash)
 
@@ -101,7 +120,7 @@ func (s *Service) Authenticate(
 		}
 	}
 
-	return user, err
+	return user, nil
 }
 
 func (s *Service) Logout(
@@ -129,6 +148,10 @@ func (service *Service) GetUserByTelegramId(
 	telegram string,
 ) (User, error) {
 	return service.repo.FindByTelegramId(ctx, telegram)
+}
+
+func (service *Service) AttachReferral(ctx context.Context, user User, startParam *string) error {
+	return service.referrals.AttachReferral(ctx, user.ID, user.ReferrerID, startParam)
 }
 
 func (service *Service) CreateToken(

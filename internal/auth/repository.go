@@ -48,6 +48,9 @@ func (r *Repository) FindByTelegramId(
 			"name",
 			"telegram",
 			"telegram_id",
+			"referrer_id",
+			"join_at",
+			"referral_accumulated_discount_percent",
 		).
 		Where("telegram_id", "=", id).
 		First(&user)
@@ -93,10 +96,13 @@ func (r *Repository) FindByToken(
 			expression.Raw("u.subscription_expires_at IS NOT NULL AND u.subscription_expires_at > UTC_TIMESTAMP() AS has_active_access"),
 			expression.Raw("COUNT(vesc.id) > 0 AS has_vless_wl_configs"),
 			expression.Raw(
-				`u.subscription_expires_at IS NOT NULL 
+				`u.subscription_expires_at IS NOT NULL
 				AND u.subscription_expires_at > DATE_ADD(UTC_TIMESTAMP(), INTERVAL 1 MONTH) AS has_money_for_next_subscription_month`,
 			),
 			"u.subscription_expires_at",
+			"u.referrer_id",
+			"u.join_at",
+			"u.referral_accumulated_discount_percent",
 		).
 		InnerJoin(fmt.Sprintf("%s t", AUTH_TOKENS_TABLE), "u.id", "=", "t.user_id").
 		LeftJoinGroup("vless_external_subscriptions ves", func(j *join.Builder) {
