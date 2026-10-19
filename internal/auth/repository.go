@@ -1,158 +1,158 @@
 package auth
 
 import (
-	"context"
-	"database/sql"
-	"fmt"
-	"time"
+    "context"
+    "database/sql"
+    "fmt"
+    "time"
 
-	"github.com/google/uuid"
-	"github.com/musiermoore/oksana-vpn-api/internal/database/builder"
-	"github.com/musiermoore/oksana-vpn-api/internal/database/builder/query/expression"
-	"github.com/musiermoore/oksana-vpn-api/internal/database/builder/query/join"
+    "github.com/google/uuid"
+    "github.com/musiermoore/oksana-vpn-api/internal/database/builder"
+    "github.com/musiermoore/oksana-vpn-api/internal/database/builder/query/expression"
+    "github.com/musiermoore/oksana-vpn-api/internal/database/builder/query/join"
 )
 
 type Repository struct {
-	db *sql.DB
+    db *sql.DB
 }
 
 func NewRepository(db *sql.DB) *Repository {
-	return &Repository{db: db}
+    return &Repository{db: db}
 }
 
 func (r *Repository) FindByTelegram(
-	ctx context.Context,
-	telegram string,
+    ctx context.Context,
+    telegram string,
 ) (User, error) {
-	var user User
+    var user User
 
-	err := builder.Query(r.db, ctx).
-		Table(USERS_TABLE).
-		Select("id", "name", "telegram", "password").
-		Where("telegram", "=", "@"+telegram).
-		First(&user)
+    err := builder.Query(r.db, ctx).
+        Table(USERS_TABLE).
+        Select("id", "name", "telegram", "password").
+        Where("telegram", "=", "@"+telegram).
+        First(&user)
 
-	return user, err
+    return user, err
 }
 
 func (r *Repository) FindByTelegramId(
-	ctx context.Context,
-	id string,
+    ctx context.Context,
+    id string,
 ) (User, error) {
-	var user User
+    var user User
 
-	err := builder.Query(r.db, ctx).
-		Table(USERS_TABLE).
-		Select(
-			"id",
-			"name",
-			"telegram",
-			"telegram_id",
-			"referrer_id",
-			"join_at",
-			"referral_accumulated_discount_percent",
-		).
-		Where("telegram_id", "=", id).
-		First(&user)
+    err := builder.Query(r.db, ctx).
+        Table(USERS_TABLE).
+        Select(
+            "id",
+            "name",
+            "telegram",
+            "telegram_id",
+            "referrer_id",
+            "join_at",
+            "referral_accumulated_discount_percent",
+        ).
+        Where("telegram_id", "=", id).
+        First(&user)
 
-	return user, err
+    return user, err
 }
 
 func (r *Repository) CreateToken(
-	ctx context.Context,
-	userID int64,
-	hash string,
-	expiresAt time.Time,
+    ctx context.Context,
+    userID int64,
+    hash string,
+    expiresAt time.Time,
 ) error {
-	return builder.Query(r.db, ctx).
-		Table(AUTH_TOKENS_TABLE).
-		Insert(AuthToken{
-			TokenHash:  hash,
-			UserId:     userID,
-			ExpiresAt:  expiresAt.UTC(),
-			LastUsedAt: time.Now().UTC(),
-			CreatedAt:  time.Now().UTC(),
-			UpdatedAt:  time.Now().UTC(),
-		})
+    return builder.Query(r.db, ctx).
+        Table(AUTH_TOKENS_TABLE).
+        Insert(AuthToken{
+            TokenHash:  hash,
+            UserId:     userID,
+            ExpiresAt:  expiresAt.UTC(),
+            LastUsedAt: time.Now().UTC(),
+            CreatedAt:  time.Now().UTC(),
+            UpdatedAt:  time.Now().UTC(),
+        })
 }
 
 func (r *Repository) FindByToken(
-	ctx context.Context,
-	hash string,
+    ctx context.Context,
+    hash string,
 ) (User, error) {
-	var user User
+    var user User
 
-	err := builder.Query(r.db, ctx).
-		Table(fmt.Sprintf("%s u", USERS_TABLE)).
-		Select(
-			"u.id",
-			"u.uuid",
-			"u.name",
-			"u.telegram",
-			"u.telegram_id",
-			"u.balance",
-			expression.Raw("GREATEST(0, -COALESCE(u.balance, 0)) AS debt"),
-			"u.is_admin",
-			expression.Raw("u.subscription_expires_at IS NOT NULL AND u.subscription_expires_at > UTC_TIMESTAMP() AS has_active_access"),
-			expression.Raw("COUNT(vesc.id) > 0 AS has_vless_wl_configs"),
-			expression.Raw(
-				`u.subscription_expires_at IS NOT NULL
-				AND u.subscription_expires_at > DATE_ADD(UTC_TIMESTAMP(), INTERVAL 1 MONTH) AS has_money_for_next_subscription_month`,
-			),
-			"u.subscription_expires_at",
-			"u.referrer_id",
-			"u.join_at",
-			"u.referral_accumulated_discount_percent",
-		).
-		InnerJoin(fmt.Sprintf("%s t", AUTH_TOKENS_TABLE), "u.id", "=", "t.user_id").
-		LeftJoinGroup("vless_external_subscriptions ves", func(j *join.Builder) {
-			j.Where("ves.is_active", "=", true)
-			j.Where("ves.include_in_whitelist", "=", true)
-			j.OnGroup(func(j *join.Builder) {
-				j.Where("u.is_admin", "=", true)
-				j.OrWhere("ves.is_ready", "=", true)
-			})
-			j.OnGroup(func(j *join.Builder) {
-				j.Where("ves.is_free", "=", true)
-				j.OrWhere("u.subscription_expires_at", ">", expression.Raw("UTC_TIMESTAMP()"))
-			})
-		}).
-		LeftJoin("vless_external_subscription_configs vesc", "vesc.vless_external_subscription_id", "=", "ves.id").
-		Where("t.token_hash", "=", hash).
-		Where("t.expires_at", ">", expression.Raw("UTC_TIMESTAMP(6)")).
-		GroupBy("u.id").
-		First(&user)
+    err := builder.Query(r.db, ctx).
+        Table(fmt.Sprintf("%s u", USERS_TABLE)).
+        Select(
+            "u.id",
+            "u.uuid",
+            "u.name",
+            "u.telegram",
+            "u.telegram_id",
+            "u.balance",
+            expression.Raw("GREATEST(0, -COALESCE(u.balance, 0)) AS debt"),
+            "u.is_admin",
+            expression.Raw("u.subscription_expires_at IS NOT NULL AND u.subscription_expires_at > UTC_TIMESTAMP() AS has_active_access"),
+            expression.Raw("COUNT(vesc.id) > 0 AS has_vless_wl_configs"),
+            expression.Raw(
+                `u.subscription_expires_at IS NOT NULL
+                AND u.subscription_expires_at > DATE_ADD(UTC_TIMESTAMP(), INTERVAL 1 MONTH) AS has_money_for_next_subscription_month`,
+            ),
+            "u.subscription_expires_at",
+            "u.referrer_id",
+            "u.join_at",
+            "u.referral_accumulated_discount_percent",
+        ).
+        InnerJoin(fmt.Sprintf("%s t", AUTH_TOKENS_TABLE), "u.id", "=", "t.user_id").
+        LeftJoinGroup("vless_external_subscriptions ves", func(j *join.Builder) {
+            j.Where("ves.is_active", "=", true)
+            j.Where("ves.include_in_whitelist", "=", true)
+            j.OnGroup(func(j *join.Builder) {
+                j.Where("u.is_admin", "=", true)
+                j.OrWhere("ves.is_ready", "=", true)
+            })
+            j.OnGroup(func(j *join.Builder) {
+                j.Where("ves.is_free", "=", true)
+                j.OrWhere("u.subscription_expires_at", ">", expression.Raw("UTC_TIMESTAMP()"))
+            })
+        }).
+        LeftJoin("vless_external_subscription_configs vesc", "vesc.vless_external_subscription_id", "=", "ves.id").
+        Where("t.token_hash", "=", hash).
+        Where("t.expires_at", ">", expression.Raw("UTC_TIMESTAMP(6)")).
+        GroupBy("u.id").
+        First(&user)
 
-	return user, err
+    return user, err
 }
 
 func (r *Repository) DeleteToken(
-	ctx context.Context,
-	hash string,
+    ctx context.Context,
+    hash string,
 ) error {
-	err := builder.Query(r.db, ctx).
-		Table(AUTH_TOKENS_TABLE).
-		Where("token_hash", "=", hash).
-		Delete()
+    err := builder.Query(r.db, ctx).
+        Table(AUTH_TOKENS_TABLE).
+        Where("token_hash", "=", hash).
+        Delete()
 
-	return err
+    return err
 }
 
 func (r *Repository) UpdateLastUsedAt(ctx context.Context, hash string) error {
-	return builder.Query(r.db, ctx).
-		Table(AUTH_TOKENS_TABLE).
-		Where("token_hash", "=", hash).
-		Update(AuthToken{
-			LastUsedAt: time.Now().UTC(),
-			UpdatedAt:  time.Now().UTC(),
-		}, "last_used_at", "updated_at")
+    return builder.Query(r.db, ctx).
+        Table(AUTH_TOKENS_TABLE).
+        Where("token_hash", "=", hash).
+        Update(AuthToken{
+            LastUsedAt: time.Now().UTC(),
+            UpdatedAt:  time.Now().UTC(),
+        }, "last_used_at", "updated_at")
 }
 
 func (r *Repository) SetUuid(ctx context.Context, id int64) error {
-	return builder.Query(r.db, ctx).
-		Table(USERS_TABLE).
-		Where("id", "=", id).
-		Update(User{
-			UUID: uuid.New().String(),
-		}, "uuid")
+    return builder.Query(r.db, ctx).
+        Table(USERS_TABLE).
+        Where("id", "=", id).
+        Update(User{
+            UUID: uuid.New().String(),
+        }, "uuid")
 }

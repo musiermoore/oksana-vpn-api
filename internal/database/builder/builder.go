@@ -1,355 +1,355 @@
 package builder
 
 import (
-	"context"
-	"database/sql"
-	"fmt"
-	"reflect"
+    "context"
+    "database/sql"
+    "fmt"
+    "reflect"
 
-	"github.com/musiermoore/oksana-vpn-api/internal/database/builder/query/bindings"
-	"github.com/musiermoore/oksana-vpn-api/internal/database/builder/query/expression"
-	"github.com/musiermoore/oksana-vpn-api/internal/database/builder/query/groupby"
-	"github.com/musiermoore/oksana-vpn-api/internal/database/builder/query/insert"
-	"github.com/musiermoore/oksana-vpn-api/internal/database/builder/query/join"
-	"github.com/musiermoore/oksana-vpn-api/internal/database/builder/query/orderby"
-	"github.com/musiermoore/oksana-vpn-api/internal/database/builder/query/update"
-	"github.com/musiermoore/oksana-vpn-api/internal/database/builder/query/where"
+    "github.com/musiermoore/oksana-vpn-api/internal/database/builder/query/bindings"
+    "github.com/musiermoore/oksana-vpn-api/internal/database/builder/query/expression"
+    "github.com/musiermoore/oksana-vpn-api/internal/database/builder/query/groupby"
+    "github.com/musiermoore/oksana-vpn-api/internal/database/builder/query/insert"
+    "github.com/musiermoore/oksana-vpn-api/internal/database/builder/query/join"
+    "github.com/musiermoore/oksana-vpn-api/internal/database/builder/query/orderby"
+    "github.com/musiermoore/oksana-vpn-api/internal/database/builder/query/update"
+    "github.com/musiermoore/oksana-vpn-api/internal/database/builder/query/where"
 )
 
 func Query(db QueryExecutor, ctx context.Context) *Builder {
-	return &Builder{
-		db:  db,
-		ctx: ctx,
-	}
+    return &Builder{
+        db:  db,
+        ctx: ctx,
+    }
 }
 
 func (r *Builder) Clone() *Builder {
-	clone := *r
-	return &clone
+    clone := *r
+    return &clone
 }
 
 func (r *Builder) GetDb() QueryExecutor {
-	return r.db
+    return r.db
 }
 
 func (r *Builder) GetCtx() context.Context {
-	return r.ctx
+    return r.ctx
 }
 
 func (r *Builder) GetTable() string {
-	return r.table
+    return r.table
 }
 
 func (r *Builder) GetSelectRows() []string {
-	return r.selectRows
+    return r.selectRows
 }
 
 func (r *Builder) GetJoins() []join.Join {
-	return r.joins
+    return r.joins
 }
 
 func (r *Builder) GetWheres() []where.Where {
-	return r.wheres
+    return r.wheres
 }
 
 func (r *Builder) GetGroupBy() []groupby.GroupBy {
-	return r.groupBy
+    return r.groupBy
 }
 
 func (r *Builder) GetOrderBy() []orderby.OrderBy {
-	return r.orderBy
+    return r.orderBy
 }
 
 func (r *Builder) GetLimit() int {
-	return r.limit
+    return r.limit
 }
 
 func (r *Builder) GetOffset() int {
-	return r.offset
+    return r.offset
 }
 
 func (r *Builder) GetArgs() []any {
-	return r.args
+    return r.args
 }
 
 func (r *Builder) Table(table string) *Builder {
-	r.table = table
+    r.table = table
 
-	return r
+    return r
 }
 
 func (r *Builder) Select(columns ...any) *Builder {
-	var rows []string
+    var rows []string
 
-	for _, item := range columns {
-		column := ""
+    for _, item := range columns {
+        column := ""
 
-		switch v := item.(type) {
+        switch v := item.(type) {
 
-		case expression.RawExpression:
-			if len(v.Args) > 0 {
-				column = bindings.Bindings(v.Column, v.Args...)
-			} else {
-				column = v.Column
-			}
-		case string:
-			column = v
-		default:
-			column = ""
-		}
+        case expression.RawExpression:
+            if len(v.Args) > 0 {
+                column = bindings.Bindings(v.Column, v.Args...)
+            } else {
+                column = v.Column
+            }
+        case string:
+            column = v
+        default:
+            column = ""
+        }
 
-		if column == "" {
-			panic(fmt.Errorf("Invalid column: %s", item))
+        if column == "" {
+            panic(fmt.Errorf("Invalid column: %s", item))
 
-			continue
-		}
+            continue
+        }
 
-		rows = append(rows, column)
-	}
+        rows = append(rows, column)
+    }
 
-	r.selectRows = append(r.selectRows, rows...)
+    r.selectRows = append(r.selectRows, rows...)
 
-	return r
+    return r
 }
 
 func (r *Builder) InnerJoin(
-	table string,
-	firstColumn string,
-	operator string,
-	secondColumn string,
+    table string,
+    firstColumn string,
+    operator string,
+    secondColumn string,
 ) *Builder {
-	r.BaseJoin(
-		join.InnerJoin,
-		table,
-		firstColumn,
-		operator,
-		secondColumn,
-	)
+    r.BaseJoin(
+        join.InnerJoin,
+        table,
+        firstColumn,
+        operator,
+        secondColumn,
+    )
 
-	return r
+    return r
 }
 
 func (r *Builder) LeftJoin(
-	table string,
-	firstColumn string,
-	operator string,
-	secondColumn string,
+    table string,
+    firstColumn string,
+    operator string,
+    secondColumn string,
 ) *Builder {
-	r.BaseJoin(
-		join.LeftJoin,
-		table,
-		firstColumn,
-		operator,
-		secondColumn,
-	)
+    r.BaseJoin(
+        join.LeftJoin,
+        table,
+        firstColumn,
+        operator,
+        secondColumn,
+    )
 
-	return r
+    return r
 }
 
 func (r *Builder) RightJoin(
-	table string,
-	firstColumn string,
-	operator string,
-	secondColumn string,
+    table string,
+    firstColumn string,
+    operator string,
+    secondColumn string,
 ) *Builder {
-	r.BaseJoin(
-		join.RightJoin,
-		table,
-		firstColumn,
-		operator,
-		secondColumn,
-	)
+    r.BaseJoin(
+        join.RightJoin,
+        table,
+        firstColumn,
+        operator,
+        secondColumn,
+    )
 
-	return r
+    return r
 }
 
 func (r *Builder) BaseJoin(
-	joinType join.JoinType,
-	table string,
-	firstColumn string,
-	operator string,
-	secondColumn string,
+    joinType join.JoinType,
+    table string,
+    firstColumn string,
+    operator string,
+    secondColumn string,
 ) {
-	r.joins = append(r.joins, join.Join{
-		JoinType:     joinType,
-		Table:        table,
-		FirstColumn:  firstColumn,
-		Operator:     operator,
-		SecondColumn: secondColumn,
-	})
+    r.joins = append(r.joins, join.Join{
+        JoinType:     joinType,
+        Table:        table,
+        FirstColumn:  firstColumn,
+        Operator:     operator,
+        SecondColumn: secondColumn,
+    })
 }
 
 func (r *Builder) LeftJoinGroup(
-	table string,
-	callback func(*join.Builder),
+    table string,
+    callback func(*join.Builder),
 ) *Builder {
-	r.BaseJoinGroup(join.LeftJoin, table, callback)
+    r.BaseJoinGroup(join.LeftJoin, table, callback)
 
-	return r
+    return r
 }
 
 func (r *Builder) InnerJoinGroup(
-	table string,
-	callback func(*join.Builder),
+    table string,
+    callback func(*join.Builder),
 ) *Builder {
-	r.BaseJoinGroup(join.InnerJoin, table, callback)
+    r.BaseJoinGroup(join.InnerJoin, table, callback)
 
-	return r
+    return r
 }
 
 func (r *Builder) BaseJoinGroup(
-	joinType join.JoinType,
-	table string,
-	callback func(*join.Builder),
+    joinType join.JoinType,
+    table string,
+    callback func(*join.Builder),
 ) {
-	joinBuilder := join.NewBuilder()
+    joinBuilder := join.NewBuilder()
 
-	callback(joinBuilder)
+    callback(joinBuilder)
 
-	r.joins = append(r.joins, join.Join{
-		JoinType: joinType,
-		Table:    table,
-		Group:    joinBuilder,
-	})
+    r.joins = append(r.joins, join.Join{
+        JoinType: joinType,
+        Table:    table,
+        Group:    joinBuilder,
+    })
 }
 
 func (r *Builder) Where(column, operator string, value any) *Builder {
-	return r.where("AND", column, operator, value)
+    return r.where("AND", column, operator, value)
 }
 
 func (r *Builder) OrWhere(column, operator string, value any) *Builder {
-	return r.where("OR", column, operator, value)
+    return r.where("OR", column, operator, value)
 }
 
 func (r *Builder) where(boolean, column, operator string, value any) *Builder {
-	r.wheres = append(r.wheres, where.Where{
-		Column:   column,
-		Operator: operator,
-		Value:    value,
-		Boolean:  boolean,
-	})
+    r.wheres = append(r.wheres, where.Where{
+        Column:   column,
+        Operator: operator,
+        Value:    value,
+        Boolean:  boolean,
+    })
 
-	if _, ok := value.(expression.RawExpression); !ok {
-		r.args = append(r.args, value)
-	}
+    if _, ok := value.(expression.RawExpression); !ok {
+        r.args = append(r.args, value)
+    }
 
-	return r
+    return r
 }
 
 func (r *Builder) OrderBy(
-	column string,
-	ascending bool,
+    column string,
+    ascending bool,
 ) *Builder {
-	r.orderBy = append(r.orderBy, orderby.OrderBy{
-		Column:    column,
-		Ascending: ascending,
-	})
+    r.orderBy = append(r.orderBy, orderby.OrderBy{
+        Column:    column,
+        Ascending: ascending,
+    })
 
-	return r
+    return r
 }
 
 func (r *Builder) Limit(limit int) *Builder {
-	r.limit = limit
-	r.hasLimit = true
+    r.limit = limit
+    r.hasLimit = true
 
-	return r
+    return r
 }
 
 func (r *Builder) Offset(offset int) *Builder {
-	r.offset = offset
+    r.offset = offset
 
-	return r
+    return r
 }
 
 func (r *Builder) ForUpdate() *Builder {
-	r.forUpdate = true
-	return r
+    r.forUpdate = true
+    return r
 }
 
 func (r *Builder) GroupBy(
-	column string,
+    column string,
 ) *Builder {
-	r.groupBy = append(r.groupBy, groupby.GroupBy{
-		Column: column,
-	})
+    r.groupBy = append(r.groupBy, groupby.GroupBy{
+        Column: column,
+    })
 
-	return r
+    return r
 }
 
 func (r *Builder) First(dest any) error {
-	r.Limit(1)
+    r.Limit(1)
 
-	rows, err := r.queryContext()
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
+    rows, err := r.queryContext()
+    if err != nil {
+        return err
+    }
+    defer rows.Close()
 
-	if !rows.Next() {
-		return sql.ErrNoRows
-	}
+    if !rows.Next() {
+        return sql.ErrNoRows
+    }
 
-	return scanStruct(rows, dest)
+    return scanStruct(rows, dest)
 }
 
 func (r *Builder) List(dest any) error {
-	rows, err := r.queryContext()
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
+    rows, err := r.queryContext()
+    if err != nil {
+        return err
+    }
+    defer rows.Close()
 
-	value := reflect.ValueOf(dest)
+    value := reflect.ValueOf(dest)
 
-	if value.Kind() != reflect.Pointer || value.IsNil() || value.Elem().Kind() != reflect.Slice {
-		return fmt.Errorf("destination must be a pointer to slice")
-	}
+    if value.Kind() != reflect.Pointer || value.IsNil() || value.Elem().Kind() != reflect.Slice {
+        return fmt.Errorf("destination must be a pointer to slice")
+    }
 
-	slice := value.Elem()
-	elementType := slice.Type().Elem()
+    slice := value.Elem()
+    elementType := slice.Type().Elem()
 
-	for rows.Next() {
-		element := reflect.New(elementType)
+    for rows.Next() {
+        element := reflect.New(elementType)
 
-		if err := scanStruct(rows, element.Interface()); err != nil {
-			return err
-		}
+        if err := scanStruct(rows, element.Interface()); err != nil {
+            return err
+        }
 
-		slice.Set(reflect.Append(slice, element.Elem()))
-	}
+        slice.Set(reflect.Append(slice, element.Elem()))
+    }
 
-	return rows.Err()
+    return rows.Err()
 }
 
 func (r *Builder) Insert(value any) error {
-	columns, values, err := insert.InsertValues(value)
-	if err != nil {
-		return err
-	}
+    columns, values, err := insert.InsertValues(value)
+    if err != nil {
+        return err
+    }
 
-	return r.execContext(
-		r.buildInsertQuery(columns),
-		values,
-	)
+    return r.execContext(
+        r.buildInsertQuery(columns),
+        values,
+    )
 }
 
 func (r *Builder) Update(value any, updatedColumns ...string) error {
-	columns, values, err := update.UpdateValues(value, updatedColumns)
-	if err != nil {
-		return err
-	}
+    columns, values, err := update.UpdateValues(value, updatedColumns)
+    if err != nil {
+        return err
+    }
 
-	values = append(values, r.GetArgs()...)
+    values = append(values, r.GetArgs()...)
 
-	return r.execContext(
-		r.buildUpdateQuery(columns),
-		values,
-	)
+    return r.execContext(
+        r.buildUpdateQuery(columns),
+        values,
+    )
 }
 
 func (r *Builder) Delete() error {
-	return r.execContext(
-		r.buildDeleteQuery(),
-		r.GetArgs(),
-	)
+    return r.execContext(
+        r.buildDeleteQuery(),
+        r.GetArgs(),
+    )
 }

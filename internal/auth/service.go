@@ -1,188 +1,188 @@
 package auth
 
 import (
-	"context"
-	"crypto/rand"
-	"crypto/sha256"
-	"database/sql"
-	"encoding/base64"
-	"encoding/hex"
-	"errors"
-	"log"
-	"time"
+    "context"
+    "crypto/rand"
+    "crypto/sha256"
+    "database/sql"
+    "encoding/base64"
+    "encoding/hex"
+    "errors"
+    "log"
+    "time"
 
-	referralservice "github.com/musiermoore/oksana-vpn-api/internal/services/referral"
-	"golang.org/x/crypto/bcrypt"
+    referralservice "github.com/musiermoore/oksana-vpn-api/internal/services/referral"
+    "golang.org/x/crypto/bcrypt"
 )
 
 var (
-	ErrInvalidCredentials = errors.New("invalid credentials")
-	ErrInvalidToken       = errors.New("invalid token")
-	ErrTokenCreation      = errors.New("failed to create token")
+    ErrInvalidCredentials = errors.New("invalid credentials")
+    ErrInvalidToken       = errors.New("invalid token")
+    ErrTokenCreation      = errors.New("failed to create token")
 )
 
 type Service struct {
-	repo      *Repository
-	referrals *referralservice.Service
+    repo      *Repository
+    referrals *referralservice.Service
 }
 
 func NewService(repo *Repository) *Service {
-	return &Service{
-		repo:      repo,
-		referrals: referralservice.NewService(referralservice.NewRepository(repo.db)),
-	}
+    return &Service{
+        repo:      repo,
+        referrals: referralservice.NewService(referralservice.NewRepository(repo.db)),
+    }
 }
 
 func tokenHash(token string) (string, error) {
-	raw, err := base64.RawURLEncoding.DecodeString(token)
+    raw, err := base64.RawURLEncoding.DecodeString(token)
 
-	if err != nil || len(raw) != 32 {
-		return "", ErrInvalidToken
-	}
+    if err != nil || len(raw) != 32 {
+        return "", ErrInvalidToken
+    }
 
-	sum := sha256.Sum256([]byte(token))
+    sum := sha256.Sum256([]byte(token))
 
-	return hex.EncodeToString(sum[:]), nil
+    return hex.EncodeToString(sum[:]), nil
 }
 
 func (s *Service) Login(
-	ctx context.Context,
-	telegram string,
-	password string,
+    ctx context.Context,
+    telegram string,
+    password string,
 ) (string, time.Time, error) {
-	user, err := s.GetUserByTelegram(ctx, telegram)
+    user, err := s.GetUserByTelegram(ctx, telegram)
 
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", time.Time{}, ErrInvalidCredentials
-	}
+    if errors.Is(err, sql.ErrNoRows) {
+        return "", time.Time{}, ErrInvalidCredentials
+    }
 
-	if err != nil {
-		return "", time.Time{}, err
-	}
+    if err != nil {
+        return "", time.Time{}, err
+    }
 
-	err = bcrypt.CompareHashAndPassword(
-		[]byte(user.PasswordHash.String),
-		[]byte(password),
-	)
+    err = bcrypt.CompareHashAndPassword(
+        []byte(user.PasswordHash.String),
+        []byte(password),
+    )
 
-	if err != nil {
-		return "", time.Time{}, ErrInvalidCredentials
-	}
+    if err != nil {
+        return "", time.Time{}, ErrInvalidCredentials
+    }
 
-	token, expiresAt, err := s.CreateToken(ctx, user)
+    token, expiresAt, err := s.CreateToken(ctx, user)
 
-	if err != nil {
-		return "", time.Time{}, ErrTokenCreation
-	}
+    if err != nil {
+        return "", time.Time{}, ErrTokenCreation
+    }
 
-	return token, expiresAt, nil
+    return token, expiresAt, nil
 }
 
 func (s *Service) Authenticate(
-	ctx context.Context,
-	token string,
+    ctx context.Context,
+    token string,
 ) (User, error) {
-	hash, err := tokenHash(token)
+    hash, err := tokenHash(token)
 
-	if err != nil {
-		return User{}, err
-	}
+    if err != nil {
+        return User{}, err
+    }
 
-	user, err := s.repo.FindByToken(ctx, hash)
+    user, err := s.repo.FindByToken(ctx, hash)
 
-	if errors.Is(err, sql.ErrNoRows) {
-		return User{}, ErrInvalidToken
-	}
-	if err != nil {
-		return User{}, err
-	}
+    if errors.Is(err, sql.ErrNoRows) {
+        return User{}, ErrInvalidToken
+    }
+    if err != nil {
+        return User{}, err
+    }
 
-	user.Referral, err = s.referrals.GetSummary(
-		ctx,
-		user.ID,
-		user.ReferrerID,
-		user.JoinAt,
-		user.ReferralAccumulatedDiscountPercent,
-	)
-	if err != nil {
-		return User{}, err
-	}
+    user.Referral, err = s.referrals.GetSummary(
+        ctx,
+        user.ID,
+        user.ReferrerID,
+        user.JoinAt,
+        user.ReferralAccumulatedDiscountPercent,
+    )
+    if err != nil {
+        return User{}, err
+    }
 
-	lastUsedAtErr := s.repo.UpdateLastUsedAt(ctx, hash)
+    lastUsedAtErr := s.repo.UpdateLastUsedAt(ctx, hash)
 
-	if lastUsedAtErr != nil {
-		log.Printf("WARNING: last_used_at failed to update. Error: %s", lastUsedAtErr)
-	}
+    if lastUsedAtErr != nil {
+        log.Printf("WARNING: last_used_at failed to update. Error: %s", lastUsedAtErr)
+    }
 
-	if user.UUID == "" {
-		if err := s.repo.SetUuid(ctx, user.ID); err != nil {
-			log.Printf("WARNING: uuid failed to set for user %d: %v", user.ID, err)
-		}
-	}
+    if user.UUID == "" {
+        if err := s.repo.SetUuid(ctx, user.ID); err != nil {
+            log.Printf("WARNING: uuid failed to set for user %d: %v", user.ID, err)
+        }
+    }
 
-	return user, nil
+    return user, nil
 }
 
 func (s *Service) Logout(
-	ctx context.Context,
-	token string,
+    ctx context.Context,
+    token string,
 ) error {
-	hash, err := tokenHash(token)
+    hash, err := tokenHash(token)
 
-	if err != nil {
-		return err
-	}
+    if err != nil {
+        return err
+    }
 
-	return s.repo.DeleteToken(ctx, hash)
+    return s.repo.DeleteToken(ctx, hash)
 }
 
 func (service *Service) GetUserByTelegram(
-	ctx context.Context,
-	telegram string,
+    ctx context.Context,
+    telegram string,
 ) (User, error) {
-	return service.repo.FindByTelegram(ctx, telegram)
+    return service.repo.FindByTelegram(ctx, telegram)
 }
 
 func (service *Service) GetUserByTelegramId(
-	ctx context.Context,
-	telegram string,
+    ctx context.Context,
+    telegram string,
 ) (User, error) {
-	return service.repo.FindByTelegramId(ctx, telegram)
+    return service.repo.FindByTelegramId(ctx, telegram)
 }
 
 func (service *Service) AttachReferral(ctx context.Context, user User, startParam *string) error {
-	return service.referrals.AttachReferral(ctx, user.ID, user.ReferrerID, startParam)
+    return service.referrals.AttachReferral(ctx, user.ID, user.ReferrerID, startParam)
 }
 
 func (service *Service) CreateToken(
-	ctx context.Context,
-	user User,
+    ctx context.Context,
+    user User,
 ) (string, time.Time, error) {
-	// Generate 32 cryptographically secure random bytes.
-	raw := make([]byte, 32)
+    // Generate 32 cryptographically secure random bytes.
+    raw := make([]byte, 32)
 
-	if _, err := rand.Read(raw); err != nil {
-		return "", time.Time{}, err
-	}
+    if _, err := rand.Read(raw); err != nil {
+        return "", time.Time{}, err
+    }
 
-	token := base64.RawURLEncoding.EncodeToString(raw)
+    token := base64.RawURLEncoding.EncodeToString(raw)
 
-	// Never store the original token.
-	hash := sha256.Sum256([]byte(token))
-	storedHash := hex.EncodeToString(hash[:])
+    // Never store the original token.
+    hash := sha256.Sum256([]byte(token))
+    storedHash := hex.EncodeToString(hash[:])
 
-	expiresAt := time.Now().UTC().Add(30 * 24 * time.Hour)
+    expiresAt := time.Now().UTC().Add(30 * 24 * time.Hour)
 
-	err := service.repo.CreateToken(
-		ctx,
-		user.ID,
-		storedHash,
-		expiresAt,
-	)
+    err := service.repo.CreateToken(
+        ctx,
+        user.ID,
+        storedHash,
+        expiresAt,
+    )
 
-	if err != nil {
-		return "", time.Time{}, err
-	}
+    if err != nil {
+        return "", time.Time{}, err
+    }
 
-	return token, expiresAt, nil
+    return token, expiresAt, nil
 }

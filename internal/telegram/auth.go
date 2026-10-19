@@ -1,93 +1,93 @@
 package telegram
 
 import (
-	"fmt"
-	"net/http"
-	"strconv"
+    "fmt"
+    "net/http"
+    "strconv"
 
-	"github.com/gin-gonic/gin"
-	"github.com/musiermoore/oksana-vpn-api/internal/auth"
-	"github.com/musiermoore/oksana-vpn-api/internal/telegram/types"
-	"github.com/musiermoore/oksana-vpn-api/internal/telegram/validation"
+    "github.com/gin-gonic/gin"
+    "github.com/musiermoore/oksana-vpn-api/internal/auth"
+    "github.com/musiermoore/oksana-vpn-api/internal/telegram/types"
+    "github.com/musiermoore/oksana-vpn-api/internal/telegram/validation"
 )
 
 type TelegramService struct {
-	AuthService *auth.Service
+    AuthService *auth.Service
 }
 
 func NewService(authService *auth.Service) TelegramService {
-	return TelegramService{AuthService: authService}
+    return TelegramService{AuthService: authService}
 }
 
 func (service *TelegramService) AuthorizeByInitData(c *gin.Context) {
-	var req types.TelegramAuthRequest
+    var req types.TelegramAuthRequest
 
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "invalid request",
-		})
-		return
-	}
+    if err := c.ShouldBindJSON(&req); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{
+            "error": "invalid request",
+        })
+        return
+    }
 
-	data, err := parseInitData(req.InitData)
+    data, err := parseInitData(req.InitData)
 
-	if err != nil {
-		fmt.Println("Telegarm Auth Error: ", err)
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "Invalid data",
-		})
+    if err != nil {
+        fmt.Println("Telegarm Auth Error: ", err)
+        c.JSON(http.StatusUnauthorized, gin.H{
+            "error": "Invalid data",
+        })
 
-		return
-	}
+        return
+    }
 
-	validationService := validation.Service(data)
-	isValid, validErr := validationService.IsValid()
+    validationService := validation.Service(data)
+    isValid, validErr := validationService.IsValid()
 
-	if !isValid {
-		fmt.Println("Telegarm Auth Error: ", validErr)
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "Invalid user",
-		})
+    if !isValid {
+        fmt.Println("Telegarm Auth Error: ", validErr)
+        c.JSON(http.StatusUnauthorized, gin.H{
+            "error": "Invalid user",
+        })
 
-		return
-	}
+        return
+    }
 
-	user, err := service.AuthService.GetUserByTelegramId(c, strconv.FormatInt(data.User.ID, 10))
+    user, err := service.AuthService.GetUserByTelegramId(c, strconv.FormatInt(data.User.ID, 10))
 
-	if err != nil {
-		fmt.Println("Telegarm Auth Error: ", err)
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "User not found",
-		})
+    if err != nil {
+        fmt.Println("Telegarm Auth Error: ", err)
+        c.JSON(http.StatusUnauthorized, gin.H{
+            "error": "User not found",
+        })
 
-		return
-	}
+        return
+    }
 
-	if err := service.AuthService.AttachReferral(c.Request.Context(), user, &data.StartParam); err != nil {
-		fmt.Println("Telegram Referral Error: ", err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Unable to process referral",
-		})
-		return
-	}
+    if err := service.AuthService.AttachReferral(c.Request.Context(), user, &data.StartParam); err != nil {
+        fmt.Println("Telegram Referral Error: ", err)
+        c.JSON(http.StatusInternalServerError, gin.H{
+            "error": "Unable to process referral",
+        })
+        return
+    }
 
-	token, expiresAt, err := service.AuthService.CreateToken(c, user)
+    token, expiresAt, err := service.AuthService.CreateToken(c, user)
 
-	if err != nil {
-		fmt.Println("Telegarm Auth Error: ", err)
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "Token invalid",
-		})
+    if err != nil {
+        fmt.Println("Telegarm Auth Error: ", err)
+        c.JSON(http.StatusUnauthorized, gin.H{
+            "error": "Token invalid",
+        })
 
-		return
-	}
+        return
+    }
 
-	c.JSON(http.StatusOK, gin.H{
-		"token":       token,
-		"expires_at":  expiresAt,
-		"id":          user.ID,
-		"name":        user.Name,
-		"telegram":    user.Telegram,
-		"telegram_id": user.TelegramID,
-	})
+    c.JSON(http.StatusOK, gin.H{
+        "token":       token,
+        "expires_at":  expiresAt,
+        "id":          user.ID,
+        "name":        user.Name,
+        "telegram":    user.Telegram,
+        "telegram_id": user.TelegramID,
+    })
 }
