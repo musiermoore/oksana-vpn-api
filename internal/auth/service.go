@@ -108,6 +108,11 @@ func (s *Service) Authenticate(
         return User{}, err
     }
 
+    user.SubscriptionCodes, err = s.repo.FindPurchasedSubscriptionCodes(ctx, user.ID)
+    if err != nil {
+        return User{}, err
+    }
+
     lastUsedAtErr := s.repo.UpdateLastUsedAt(ctx, hash)
 
     if lastUsedAtErr != nil {

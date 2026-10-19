@@ -126,6 +126,29 @@ func (r *Repository) FindByToken(
     return user, err
 }
 
+func (r *Repository) FindPurchasedSubscriptionCodes(ctx context.Context, userID int64) ([]SubscriptionCode, error) {
+    codes := make([]SubscriptionCode, 0, 10)
+    err := builder.Query(r.db, ctx).
+        Table(SUBSCRIPTION_CODES_TABLE).
+        Select(
+            "id",
+            "code",
+            "months",
+            "days",
+            "price",
+            "status",
+            "activated_at",
+            "expires_at",
+            "activated_by_user_id",
+            "created_at",
+        ).
+        Where("purchased_by_user_id", "=", userID).
+        OrderBy("created_at", false).
+        Limit(10).
+        List(&codes)
+    return codes, err
+}
+
 func (r *Repository) DeleteToken(
     ctx context.Context,
     hash string,

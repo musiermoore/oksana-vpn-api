@@ -9,6 +9,7 @@ import (
 
 const USERS_TABLE = "users"
 const AUTH_TOKENS_TABLE = "telegram_app_tokens"
+const SUBSCRIPTION_CODES_TABLE = "subscription_codes"
 
 type SubscriptionCode struct {
     ID                int        `json:"id" db:"id"`
@@ -20,7 +21,7 @@ type SubscriptionCode struct {
     ActivatedAt       *time.Time `json:"activated_at" db:"activated_at"`
     ExpiresAt         *time.Time `json:"expires_at" db:"expires_at"`
     ActivatedByUserID *int       `json:"activated_by_user_id" db:"activated_by_user_id"`
-    CreatedAt         time.Time  `json:"created_at" db:"created_at"`
+    CreatedAt         *time.Time `json:"created_at" db:"created_at"`
 }
 
 type User struct {
