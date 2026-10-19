@@ -142,7 +142,7 @@ func (r *Repository) FindPurchasedSubscriptionCodes(ctx context.Context, userID 
             "activated_by_user_id",
             "created_at",
         ).
-        Where("purchased_by_user_id", "=", userID).
+        Where("buyer_user_id", "=", userID).
         OrderBy("created_at", false).
         Limit(10).
         List(&codes)

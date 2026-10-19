@@ -14,8 +14,8 @@ const SUBSCRIPTION_CODES_TABLE = "subscription_codes"
 type SubscriptionCode struct {
     ID                int        `json:"id" db:"id"`
     Code              string     `json:"code" db:"code"`
-    Months            int        `json:"months" db:"months"`
-    Days              int        `json:"days" db:"days"`
+    Months            *int       `json:"months" db:"months"`
+    Days              *int       `json:"days" db:"days"`
     Price             float64    `json:"price" db:"price"`
     Status            string     `json:"status" db:"status"`
     ActivatedAt       *time.Time `json:"activated_at" db:"activated_at"`
