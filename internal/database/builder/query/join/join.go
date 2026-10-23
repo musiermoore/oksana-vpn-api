@@ -226,8 +226,8 @@ func formatValue(value any) string {
 
 		return "0"
 	case string:
-		return bindings.FormatArgs("?", value) // only if this also adds binding
+		return bindings.Bindings("?", value)
 	default:
-		return bindings.FormatArgs("?", value)
+		return bindings.Bindings("?", value)
 	}
 }

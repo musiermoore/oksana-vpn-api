@@ -8,11 +8,10 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"log"
 	"time"
 
-	referralservice "github.com/musiermoore/oksana-vpn-api/internal/services/referral"
+	"github.com/musiermoore/oksana-vpn-api/internal/referral"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -24,173 +23,91 @@ var (
 
 type Service struct {
 	repo      *Repository
-	referrals *referralservice.Service
+	referrals *referral.Service
 }
 
-func NewService(repo *Repository) *Service {
-	return &Service{
-		repo:      repo,
-		referrals: referralservice.NewService(referralservice.NewRepository(repo.db)),
-	}
+func NewService(repo *Repository, referrals *referral.Service) *Service {
+	return &Service{repo: repo, referrals: referrals}
 }
 
 func tokenHash(token string) (string, error) {
 	raw, err := base64.RawURLEncoding.DecodeString(token)
-
 	if err != nil || len(raw) != 32 {
 		return "", ErrInvalidToken
 	}
-
 	sum := sha256.Sum256([]byte(token))
-
 	return hex.EncodeToString(sum[:]), nil
 }
 
-func (s *Service) Login(
-	ctx context.Context,
-	telegram string,
-	password string,
-) (string, time.Time, error) {
-	user, err := s.GetUserByTelegram(ctx, telegram)
-
+func (s *Service) Login(ctx context.Context, telegram, password string) (string, time.Time, error) {
+	user, err := s.repo.FindByTelegram(ctx, telegram)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", time.Time{}, ErrInvalidCredentials
 	}
-
 	if err != nil {
 		return "", time.Time{}, err
 	}
-
-	err = bcrypt.CompareHashAndPassword(
-		[]byte(user.PasswordHash.String),
-		[]byte(password),
-	)
-
-	if err != nil {
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash.String), []byte(password)); err != nil {
 		return "", time.Time{}, ErrInvalidCredentials
 	}
-
-	token, expiresAt, err := s.CreateToken(ctx, user)
-
+	token, expiresAt, err := s.CreateToken(ctx, user.ID)
 	if err != nil {
 		return "", time.Time{}, ErrTokenCreation
 	}
-
 	return token, expiresAt, nil
 }
 
-func (s *Service) Authenticate(
-	ctx context.Context,
-	token string,
-) (User, error) {
+// Authenticate validates a token and returns the identity used by protected routes.
+func (s *Service) Authenticate(ctx context.Context, token string) (int64, error) {
 	hash, err := tokenHash(token)
-
 	if err != nil {
-		return User{}, err
+		return 0, err
 	}
-
-	user, err := s.repo.FindByToken(ctx, hash)
-
+	userID, err := s.repo.FindUserIDByToken(ctx, hash)
 	if errors.Is(err, sql.ErrNoRows) {
-		return User{}, ErrInvalidToken
+		return 0, ErrInvalidToken
 	}
 	if err != nil {
-		return User{}, err
+		return 0, err
 	}
-
-	user.Referral, err = s.referrals.GetSummary(
-		ctx,
-		user.ID,
-		user.ReferrerID,
-		user.JoinAt,
-		user.ReferralAccumulatedDiscountPercent,
-	)
-	fmt.Println(user.Referral)
-	if err != nil {
-		return User{}, err
+	if err := s.repo.UpdateLastUsedAt(ctx, hash); err != nil {
+		log.Printf("WARNING: last_used_at failed to update: %v", err)
 	}
-
-	user.SubscriptionCodes, err = s.repo.FindPurchasedSubscriptionCodes(ctx, user.ID)
-	fmt.Println(user.SubscriptionCodes)
-	if err != nil {
-		return User{}, err
-	}
-
-	lastUsedAtErr := s.repo.UpdateLastUsedAt(ctx, hash)
-
-	if lastUsedAtErr != nil {
-		log.Printf("WARNING: last_used_at failed to update. Error: %s", lastUsedAtErr)
-	}
-
-	if user.UUID == "" {
-		if err := s.repo.SetUuid(ctx, user.ID); err != nil {
-			log.Printf("WARNING: uuid failed to set for user %d: %v", user.ID, err)
-		}
-	}
-
-	return user, nil
+	return userID, nil
 }
 
-func (s *Service) Logout(
-	ctx context.Context,
-	token string,
-) error {
+func (s *Service) Logout(ctx context.Context, token string) error {
 	hash, err := tokenHash(token)
-
 	if err != nil {
 		return err
 	}
-
 	return s.repo.DeleteToken(ctx, hash)
 }
 
-func (service *Service) GetUserByTelegram(
-	ctx context.Context,
-	telegram string,
-) (User, error) {
-	return service.repo.FindByTelegram(ctx, telegram)
+func (s *Service) GetUserByTelegramID(ctx context.Context, telegramID string) (User, error) {
+	return s.repo.FindByTelegramID(ctx, telegramID)
 }
 
-func (service *Service) GetUserByTelegramId(
-	ctx context.Context,
-	telegram string,
-) (User, error) {
-	return service.repo.FindByTelegramId(ctx, telegram)
+func (s *Service) AttachReferral(ctx context.Context, user User, startParam *string) error {
+	return s.referrals.AttachReferral(ctx, referral.Participant{
+		UserID:                     user.ID,
+		ReferrerID:                 user.ReferrerID,
+		JoinedAt:                   user.JoinAt,
+		AccumulatedDiscountPercent: user.ReferralAccumulatedDiscountPercent,
+	}, startParam)
 }
 
-func (service *Service) AttachReferral(ctx context.Context, user User, startParam *string) error {
-	return service.referrals.AttachReferral(ctx, user.ID, user.ReferrerID, startParam)
-}
-
-func (service *Service) CreateToken(
-	ctx context.Context,
-	user User,
-) (string, time.Time, error) {
-	// Generate 32 cryptographically secure random bytes.
+func (s *Service) CreateToken(ctx context.Context, userID int64) (string, time.Time, error) {
 	raw := make([]byte, 32)
-
 	if _, err := rand.Read(raw); err != nil {
 		return "", time.Time{}, err
 	}
-
 	token := base64.RawURLEncoding.EncodeToString(raw)
-
-	// Never store the original token.
 	hash := sha256.Sum256([]byte(token))
 	storedHash := hex.EncodeToString(hash[:])
-
 	expiresAt := time.Now().UTC().Add(30 * 24 * time.Hour)
-
-	err := service.repo.CreateToken(
-		ctx,
-		user.ID,
-		storedHash,
-		expiresAt,
-	)
-
-	if err != nil {
+	if err := s.repo.CreateToken(ctx, userID, storedHash, expiresAt); err != nil {
 		return "", time.Time{}, err
 	}
-
 	return token, expiresAt, nil
 }

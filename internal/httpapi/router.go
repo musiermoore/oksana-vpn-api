@@ -1,4 +1,4 @@
-package router
+package httpapi
 
 import (
 	"database/sql"
@@ -6,21 +6,17 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/musiermoore/oksana-vpn-api/internal/account"
 	"github.com/musiermoore/oksana-vpn-api/internal/auth"
-	"github.com/musiermoore/oksana-vpn-api/internal/router/debug"
-	"github.com/musiermoore/oksana-vpn-api/internal/router/telegram"
-	_telegram "github.com/musiermoore/oksana-vpn-api/internal/telegram"
 )
 
-func StartRouter(db *sql.DB) error {
-	r := newRouter(db)
-
-	return r.Run(":8080")
-}
-
-func newRouter(db *sql.DB) *gin.Engine {
+func NewRouter(
+	db *sql.DB,
+	authHandler *auth.Handler,
+	accountHandler *account.Handler,
+	authService *auth.Service,
+) *gin.Engine {
 	r := gin.Default()
-
 	r.Use(cors.New(cors.Config{
 		AllowOrigins: []string{
 			"https://panel.oksana1984.ru",
@@ -47,15 +43,15 @@ func newRouter(db *sql.DB) *gin.Engine {
 		MaxAge:           12 * time.Hour,
 	}))
 
-	debug.HealthRoutes(r, db)
+	registerHealthRoutes(r, db)
 
-	// Initialize authentication dependencies.
-	authRepository := auth.NewRepository(db)
-	authService := auth.NewService(authRepository)
+	authRoutes := r.Group("/api/v1/auth")
+	authRoutes.POST("/login", authHandler.Login)
+	authRoutes.POST("/telegram", authHandler.Telegram)
 
-	// Register authentication endpoints.
-	auth.RegisterRoutes(r, authService)
-	telegram.AuthRoutes(r, _telegram.NewService(authService))
-
+	protected := authRoutes.Group("")
+	protected.Use(auth.RequireAuth(authService))
+	protected.GET("/me", accountHandler.Me)
+	protected.POST("/logout", authHandler.Logout)
 	return r
 }

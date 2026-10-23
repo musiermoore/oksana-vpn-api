@@ -10,11 +10,12 @@ import (
 )
 
 type Handler struct {
-	service *Service
+	service          *Service
+	telegramBotToken string
 }
 
-func NewHandler(service *Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(service *Service, telegramBotToken string) *Handler {
+	return &Handler{service: service, telegramBotToken: telegramBotToken}
 }
 
 type LoginRequest struct {
@@ -59,21 +60,6 @@ func (h *Handler) Login(c *gin.Context) {
 		"token_type":   "Bearer",
 		"expires_at":   expiresAt,
 	})
-}
-
-func (h *Handler) Me(c *gin.Context) {
-	value, exists := c.Get("auth_user")
-
-	user, ok := value.(User)
-
-	if !exists || !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "unauthorized",
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, user)
 }
 
 func (h *Handler) Logout(c *gin.Context) {

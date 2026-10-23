@@ -9,6 +9,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const UserIDContextKey = "auth_user_id"
+
 func RequireAuth(service *Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		parts := strings.Fields(
@@ -26,7 +28,7 @@ func RequireAuth(service *Service) gin.HandlerFunc {
 
 		token := parts[1]
 
-		user, err := service.Authenticate(
+		userID, err := service.Authenticate(
 			c.Request.Context(),
 			token,
 		)
@@ -49,7 +51,7 @@ func RequireAuth(service *Service) gin.HandlerFunc {
 			return
 		}
 
-		c.Set("auth_user", user)
+		c.Set(UserIDContextKey, userID)
 		c.Set("auth_token", token)
 
 		c.Next()

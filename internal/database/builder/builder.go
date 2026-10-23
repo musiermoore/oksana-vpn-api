@@ -100,8 +100,6 @@ func (r *Builder) Select(columns ...any) *Builder {
 
         if column == "" {
             panic(fmt.Errorf("Invalid column: %s", item))
-
-            continue
         }
 
         rows = append(rows, column)
