@@ -31,10 +31,16 @@ func (h *Handler) Telegram(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user"})
 		return
 	}
-	user, err := h.service.GetUserByTelegramID(c.Request.Context(), strconv.FormatInt(data.User.ID, 10))
+	user, err := h.service.GetOrCreateUserByTelegramID(
+		c.Request.Context(),
+		strconv.FormatInt(data.User.ID, 10),
+		data.User.FirstName,
+		data.User.LastName,
+		data.User.Username,
+	)
 	if err != nil {
-		log.Printf("telegram auth user lookup error: %v", err)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
+		log.Printf("telegram auth user create or lookup error: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to load user"})
 		return
 	}
 	if err := h.service.AttachReferral(c.Request.Context(), user, &data.StartParam); err != nil {

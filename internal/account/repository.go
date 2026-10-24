@@ -16,7 +16,7 @@ const subscriptionCodesTable = "subscription_codes"
 
 type profileRow struct {
 	ID                                 int64      `db:"id"`
-	UUID                               string     `db:"uuid"`
+	UUID                               *string    `db:"uuid"`
 	Name                               string     `db:"name"`
 	Telegram                           *string    `db:"telegram"`
 	TelegramID                         *string    `db:"telegram_id"`
@@ -136,13 +136,33 @@ func (r *Repository) FindPurchasedSubscriptionCodes(ctx context.Context, userID 
 	return codes, nil
 }
 
-func (r *Repository) SetUUID(ctx context.Context, id int64) error {
-	return builder.Query(r.db, ctx).
+func (r *Repository) EnsureUUID(ctx context.Context, id int64) (*string, error) {
+	generatedUUID := uuid.New().String()
+	if err := builder.Query(r.db, ctx).
 		Table(usersTable).
 		Where("id", "=", id).
-		Update(struct {
-			UUID string `db:"uuid"`
-		}{
-			UUID: uuid.New().String(),
-		}, "uuid")
+		Where("uuid", "IS", expression.Raw("NULL")).
+		Update(profileRow{UUID: &generatedUUID}, "uuid"); err != nil {
+		return nil, err
+	}
+	if err := builder.Query(r.db, ctx).
+		Table(usersTable).
+		Where("id", "=", id).
+		Where("uuid", "=", "").
+		Update(profileRow{UUID: &generatedUUID}, "uuid"); err != nil {
+		return nil, err
+	}
+
+	var result profileRow
+	if err := builder.Query(r.db, ctx).
+		Table(usersTable).
+		Select("uuid").
+		Where("id", "=", id).
+		First(&result); err != nil {
+		return nil, err
+	}
+	if result.UUID == nil || *result.UUID == "" {
+		return nil, sql.ErrNoRows
+	}
+	return result.UUID, nil
 }

@@ -21,10 +21,18 @@ func (s *Service) GetProfile(ctx context.Context, userID int64) (Profile, error)
 	if err != nil {
 		return Profile{}, err
 	}
+	if user.UUID == nil || *user.UUID == "" {
+		userUUID, err := s.repo.EnsureUUID(ctx, user.ID)
+		if err != nil {
+			log.Printf("WARNING: uuid failed to set for user %d: %v", user.ID, err)
+			return Profile{}, err
+		}
+		user.UUID = userUUID
+	}
 
 	profile := Profile{
 		ID:                               user.ID,
-		UUID:                             user.UUID,
+		UUID:                             *user.UUID,
 		Name:                             user.Name,
 		Telegram:                         user.Telegram,
 		TelegramID:                       user.TelegramID,
@@ -52,12 +60,6 @@ func (s *Service) GetProfile(ctx context.Context, userID int64) (Profile, error)
 	profile.SubscriptionCodes, err = s.repo.FindPurchasedSubscriptionCodes(ctx, user.ID)
 	if err != nil {
 		return Profile{}, err
-	}
-
-	if user.UUID == "" {
-		if err := s.repo.SetUUID(ctx, user.ID); err != nil {
-			log.Printf("WARNING: uuid failed to set for user %d: %v", user.ID, err)
-		}
 	}
 
 	return profile, nil

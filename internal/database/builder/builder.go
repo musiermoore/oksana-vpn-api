@@ -319,10 +319,26 @@ func (r *Builder) List(dest any) error {
     return rows.Err()
 }
 
-func (r *Builder) Insert(value any) error {
+func (r *Builder) Insert(value any, insertedColumns ...string) error {
     columns, values, err := insert.InsertValues(value)
     if err != nil {
         return err
+    }
+
+    if len(insertedColumns) > 0 {
+        selectedColumns := make([]string, 0, len(insertedColumns))
+        selectedValues := make([]any, 0, len(insertedColumns))
+        for i, column := range columns {
+            for _, insertedColumn := range insertedColumns {
+                if column == insertedColumn {
+                    selectedColumns = append(selectedColumns, column)
+                    selectedValues = append(selectedValues, values[i])
+                    break
+                }
+            }
+        }
+        columns = selectedColumns
+        values = selectedValues
     }
 
     return r.execContext(

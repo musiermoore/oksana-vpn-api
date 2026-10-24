@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/musiermoore/oksana-vpn-api/internal/referral"
@@ -84,8 +85,23 @@ func (s *Service) Logout(ctx context.Context, token string) error {
 	return s.repo.DeleteToken(ctx, hash)
 }
 
-func (s *Service) GetUserByTelegramID(ctx context.Context, telegramID string) (User, error) {
-	return s.repo.FindByTelegramID(ctx, telegramID)
+func (s *Service) GetOrCreateUserByTelegramID(ctx context.Context, telegramID, firstName, lastName, username string) (User, error) {
+	username = strings.TrimPrefix(strings.TrimSpace(username), "@")
+	name := strings.Join(strings.Fields(firstName+" "+lastName), " ")
+	if name == "" {
+		name = username
+	}
+	if name == "" {
+		name = telegramID
+	}
+
+	var telegram *string
+	if username != "" {
+		value := "@" + username
+		telegram = &value
+	}
+
+	return s.repo.FindOrCreateByTelegramID(ctx, telegramID, name, telegram)
 }
 
 func (s *Service) AttachReferral(ctx context.Context, user User, startParam *string) error {

@@ -11,12 +11,14 @@ const authTokensTable = "telegram_app_tokens"
 // User contains only the fields needed to log in and attach a referral.
 type User struct {
 	ID                                 int64          `db:"id"`
+	UUID                               *string        `db:"uuid"`
 	Name                               string         `db:"name"`
 	Telegram                           *string        `db:"telegram"`
 	TelegramID                         *string        `db:"telegram_id"`
 	ReferrerID                         *int64         `db:"referrer_id"`
 	JoinAt                             *time.Time     `db:"join_at"`
 	ReferralAccumulatedDiscountPercent int            `db:"referral_accumulated_discount_percent"`
+	UpdatedAt                          *time.Time     `db:"updated_at"`
 	PasswordHash                       sql.NullString `db:"password"`
 }
 
