@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/musiermoore/oksana-vpn-api/internal/account"
 	"github.com/musiermoore/oksana-vpn-api/internal/auth"
+	"github.com/musiermoore/oksana-vpn-api/internal/telegramdev"
 )
 
 func NewRouter(
@@ -15,8 +16,14 @@ func NewRouter(
 	authHandler *auth.Handler,
 	accountHandler *account.Handler,
 	authService *auth.Service,
+	notifiers ...*telegramdev.Notifier,
 ) *gin.Engine {
-	r := gin.Default()
+	var notifier *telegramdev.Notifier
+	if len(notifiers) > 0 {
+		notifier = notifiers[0]
+	}
+	r := gin.New()
+	r.Use(gin.Logger(), reportExceptions(notifier))
 	r.Use(cors.New(cors.Config{
 		AllowOrigins: []string{
 			"https://panel.oksana1984.ru",

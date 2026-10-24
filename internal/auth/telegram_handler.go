@@ -39,17 +39,20 @@ func (h *Handler) Telegram(c *gin.Context) {
 		data.User.Username,
 	)
 	if err != nil {
+		_ = c.Error(err)
 		log.Printf("telegram auth user create or lookup error: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to load user"})
 		return
 	}
 	if err := h.service.AttachReferral(c.Request.Context(), user, &data.StartParam); err != nil {
+		_ = c.Error(err)
 		log.Printf("telegram referral error: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to process referral"})
 		return
 	}
 	token, expiresAt, err := h.service.CreateToken(c.Request.Context(), user.ID)
 	if err != nil {
+		_ = c.Error(err)
 		log.Printf("telegram token creation error: %v", err)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Token invalid"})
 		return

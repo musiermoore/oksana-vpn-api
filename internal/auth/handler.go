@@ -47,6 +47,7 @@ func (h *Handler) Login(c *gin.Context) {
 	}
 
 	if err != nil {
+		_ = c.Error(err)
 		log.Printf("login failed: %v", err)
 
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -69,6 +70,7 @@ func (h *Handler) Logout(c *gin.Context) {
 		c.Request.Context(),
 		token,
 	); err != nil {
+		_ = c.Error(err)
 		log.Printf("logout failed: %v", err)
 
 		c.JSON(http.StatusInternalServerError, gin.H{

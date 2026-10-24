@@ -26,6 +26,7 @@ func (h *Handler) Me(c *gin.Context) {
 
 	profile, err := h.service.GetProfile(c.Request.Context(), userID)
 	if err != nil {
+		_ = c.Error(err)
 		log.Printf("load account profile failed: %v", err)
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "service unavailable"})
 		return

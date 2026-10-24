@@ -42,6 +42,7 @@ func RequireAuth(service *Service) gin.HandlerFunc {
 		}
 
 		if err != nil {
+			_ = c.Error(err)
 			log.Printf("authentication database error: %v", err)
 
 			c.AbortWithStatusJSON(

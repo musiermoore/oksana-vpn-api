@@ -12,6 +12,7 @@ import (
 	"github.com/musiermoore/oksana-vpn-api/internal/database"
 	"github.com/musiermoore/oksana-vpn-api/internal/httpapi"
 	"github.com/musiermoore/oksana-vpn-api/internal/referral"
+	"github.com/musiermoore/oksana-vpn-api/internal/telegramdev"
 )
 
 func Run() error {
@@ -48,11 +49,16 @@ func Run() error {
 	accountService := account.NewService(accountRepository, referrals)
 	authHandler := auth.NewHandler(authService, os.Getenv("TELEGRAM_BOT_TOKEN"))
 	accountHandler := account.NewHandler(accountService)
+	exceptionNotifier := telegramdev.NewNotifier(
+		os.Getenv("TELEGRAM_BOT_TOKEN"),
+		os.Getenv("TELEGRAM_DEV_CHAT_ID"),
+	)
 	router := httpapi.NewRouter(
 		db,
 		authHandler,
 		accountHandler,
 		authService,
+		exceptionNotifier,
 	)
 	return router.Run(":8080")
 }
