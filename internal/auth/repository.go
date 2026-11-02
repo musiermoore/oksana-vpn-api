@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -172,4 +173,127 @@ func (r *Repository) UpdateLastUsedAt(ctx context.Context, hash string) error {
 			LastUsedAt: now,
 			UpdatedAt:  now,
 		}, "last_used_at", "updated_at")
+}
+
+func (r *Repository) CreateOIDCTransaction(ctx context.Context, stateHash string, tx oidcTransaction) error {
+	_, _ = r.db.ExecContext(ctx, `DELETE FROM telegram_oidc_transactions WHERE expires_at <= UTC_TIMESTAMP(6) ORDER BY expires_at LIMIT 1000`)
+	_, err := r.db.ExecContext(ctx, `INSERT INTO telegram_oidc_transactions
+		(state_hash, nonce, pkce_verifier, return_url, expires_at, created_at)
+		VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP(6))`, stateHash, tx.Nonce, tx.Verifier, tx.ReturnURL, tx.ExpiresAt.UTC())
+	return err
+}
+
+func (r *Repository) ConsumeOIDCTransaction(ctx context.Context, stateHash string, now time.Time) (oidcTransaction, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return oidcTransaction{}, err
+	}
+	defer tx.Rollback()
+	var result oidcTransaction
+	err = tx.QueryRowContext(ctx, `SELECT nonce, pkce_verifier, return_url, expires_at
+		FROM telegram_oidc_transactions WHERE state_hash = ? AND expires_at > ? FOR UPDATE`, stateHash, now.UTC()).Scan(
+		&result.Nonce, &result.Verifier, &result.ReturnURL, &result.ExpiresAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return oidcTransaction{}, ErrOIDCTransaction
+		}
+		return oidcTransaction{}, err
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM telegram_oidc_transactions WHERE state_hash = ?`, stateHash); err != nil {
+		return oidcTransaction{}, err
+	}
+	if err = tx.Commit(); err != nil {
+		return oidcTransaction{}, err
+	}
+	return result, nil
+}
+
+func (r *Repository) FindUserByOIDCSubject(ctx context.Context, subject string) (User, error) {
+	var user User
+	err := builder.Query(r.db, ctx).
+		Table("users u").
+		Select("u.id", "u.uuid", "u.name", "u.telegram", "u.telegram_id", "u.referrer_id", "u.join_at", "u.referral_accumulated_discount_percent").
+		InnerJoin("telegram_oidc_identities i", "i.user_id", "=", "u.id").
+		Where("i.subject", "=", subject).
+		First(&user)
+	if errors.Is(err, sql.ErrNoRows) {
+		return User{}, ErrOIDCIdentity
+	}
+	return user, err
+}
+
+func (r *Repository) ProvisionOIDCUser(ctx context.Context, subject, name, username string) (User, error) {
+	if strings.TrimSpace(subject) == "" {
+		return User{}, ErrOIDCIdentity
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		name = strings.TrimSpace(username)
+	}
+	if name == "" {
+		name = "Telegram user"
+	}
+	username = strings.TrimPrefix(strings.TrimSpace(username), "@")
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return User{}, err
+	}
+	defer tx.Rollback()
+	// The subject is the only matching key. Profile fields are display data only.
+	var existing User
+	err = tx.QueryRowContext(ctx, `SELECT u.id, u.uuid, u.name, u.telegram, u.telegram_id, u.referrer_id, u.join_at, u.referral_accumulated_discount_percent
+		FROM users u INNER JOIN telegram_oidc_identities i ON i.user_id = u.id WHERE i.subject = ? FOR UPDATE`, subject).Scan(
+		&existing.ID, &existing.UUID, &existing.Name, &existing.Telegram, &existing.TelegramID, &existing.ReferrerID, &existing.JoinAt, &existing.ReferralAccumulatedDiscountPercent)
+	if err == nil {
+		return existing, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return User{}, err
+	}
+	generatedUUID := uuid.New().String()
+	now := time.Now().UTC()
+	res, err := tx.ExecContext(ctx, `INSERT INTO users (uuid, name, join_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`, generatedUUID, name, now, now, now)
+	if err != nil {
+		return User{}, err
+	}
+	userID, err := res.LastInsertId()
+	if err != nil {
+		return User{}, err
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO telegram_oidc_identities (subject, user_id, created_at) VALUES (?, ?, ?)`, subject, userID, now); err != nil {
+		return User{}, ErrOIDCIdentityConflict
+	}
+	if err = tx.Commit(); err != nil {
+		return User{}, err
+	}
+	return User{ID: userID, UUID: &generatedUUID, Name: name, JoinAt: &now}, nil
+}
+
+func (r *Repository) CreateOIDCLoginTicket(ctx context.Context, ticketHash string, userID int64, expiresAt time.Time) error {
+	_, _ = r.db.ExecContext(ctx, `DELETE FROM telegram_oidc_login_tickets WHERE expires_at <= UTC_TIMESTAMP(6) ORDER BY expires_at LIMIT 1000`)
+	_, err := r.db.ExecContext(ctx, `INSERT INTO telegram_oidc_login_tickets (ticket_hash, user_id, expires_at, created_at)
+		VALUES (?, ?, ?, UTC_TIMESTAMP(6))`, ticketHash, userID, expiresAt.UTC())
+	return err
+}
+
+func (r *Repository) ConsumeOIDCLoginTicket(ctx context.Context, ticketHash string, now time.Time) (int64, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	var userID int64
+	if err := tx.QueryRowContext(ctx, `SELECT user_id FROM telegram_oidc_login_tickets WHERE ticket_hash = ? AND expires_at > ? FOR UPDATE`, ticketHash, now.UTC()).Scan(&userID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, ErrOIDCTicket
+		}
+		return 0, err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM telegram_oidc_login_tickets WHERE ticket_hash = ?`, ticketHash); err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return userID, nil
 }

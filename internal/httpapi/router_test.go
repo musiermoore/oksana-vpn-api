@@ -15,12 +15,15 @@ func TestRoutesKeepExistingPathsAndProtection(t *testing.T) {
 	router := NewRouter(nil, auth.NewHandler(nil, ""), account.NewHandler(nil), nil)
 
 	want := map[string]bool{
-		"GET /health":                true,
-		"GET /readyz":                true,
-		"POST /api/v1/auth/login":    true,
-		"POST /api/v1/auth/telegram": true,
-		"GET /api/v1/auth/me":        true,
-		"POST /api/v1/auth/logout":   true,
+		"GET /health":                              true,
+		"GET /readyz":                              true,
+		"POST /api/v1/auth/login":                  true,
+		"POST /api/v1/auth/telegram":               true,
+		"GET /api/v1/auth/telegram/oidc/start":     true,
+		"GET /api/v1/auth/telegram/oidc/callback":  true,
+		"POST /api/v1/auth/telegram/oidc/exchange": true,
+		"GET /api/v1/auth/me":                      true,
+		"POST /api/v1/auth/logout":                 true,
 	}
 	for _, route := range router.Routes() {
 		key := route.Method + " " + route.Path
@@ -51,6 +54,19 @@ func TestRoutesKeepExistingPathsAndProtection(t *testing.T) {
 		router.ServeHTTP(response, request)
 		if response.Code != http.StatusBadRequest {
 			t.Errorf("%s without a token returned %d; want public request validation (400)", path, response.Code)
+		}
+	}
+
+	for _, route := range []struct{ method, path string }{
+		{http.MethodGet, "/api/v1/auth/telegram/oidc/start"},
+		{http.MethodGet, "/api/v1/auth/telegram/oidc/callback"},
+		{http.MethodPost, "/api/v1/auth/telegram/oidc/exchange"},
+	} {
+		response := httptest.NewRecorder()
+		request := httptest.NewRequest(route.method, route.path, nil)
+		router.ServeHTTP(response, request)
+		if response.Code != http.StatusServiceUnavailable {
+			t.Errorf("%s %s without configuration returned %d; want 503", route.method, route.path, response.Code)
 		}
 	}
 }

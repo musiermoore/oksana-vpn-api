@@ -22,6 +22,15 @@ type User struct {
 	PasswordHash                       sql.NullString `db:"password"`
 }
 
+// TelegramOIDCTransaction is a short-lived server-side Authorization Code transaction.
+type TelegramOIDCTransaction struct {
+	StateHash string
+	Nonce     string
+	Verifier  string
+	ReturnURL string
+	ExpiresAt time.Time
+}
+
 type AuthToken struct {
 	TokenHash  string    `db:"token_hash"`
 	UserID     int64     `db:"user_id"`

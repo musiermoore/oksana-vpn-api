@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -48,17 +49,35 @@ func Run() error {
 	authService := auth.NewService(authRepository, referrals)
 	accountService := account.NewService(accountRepository, referrals)
 	authHandler := auth.NewHandler(authService, os.Getenv("TELEGRAM_BOT_TOKEN"))
+	returnURLs := splitConfigURLs(os.Getenv("TELEGRAM_OIDC_FRONTEND_RETURN_URLS"))
+	oidcHandler := auth.NewTelegramOIDCHandler(authService, auth.TelegramOIDCConfig{
+		ClientID:     os.Getenv("TELEGRAM_OIDC_CLIENT_ID"),
+		ClientSecret: os.Getenv("TELEGRAM_OIDC_CLIENT_SECRET"),
+		RedirectURI:  os.Getenv("TELEGRAM_OIDC_REDIRECT_URI"),
+		ReturnURLs:   returnURLs,
+	})
 	accountHandler := account.NewHandler(accountService)
 	exceptionNotifier := telegramdev.NewNotifier(
 		os.Getenv("TELEGRAM_BOT_TOKEN"),
 		os.Getenv("TELEGRAM_DEV_CHAT_ID"),
 	)
-	router := httpapi.NewRouter(
+	router := httpapi.NewRouterWithOIDC(
 		db,
 		authHandler,
 		accountHandler,
 		authService,
+		oidcHandler,
 		exceptionNotifier,
 	)
 	return router.Run(":8080")
+}
+
+func splitConfigURLs(value string) []string {
+	var urls []string
+	for _, item := range strings.Split(value, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			urls = append(urls, item)
+		}
+	}
+	return urls
 }
