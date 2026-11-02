@@ -20,6 +20,7 @@ type User struct {
 	ReferralAccumulatedDiscountPercent int            `db:"referral_accumulated_discount_percent"`
 	UpdatedAt                          *time.Time     `db:"updated_at"`
 	PasswordHash                       sql.NullString `db:"password"`
+	Login                              *string        `db:"login"`
 }
 
 // TelegramOIDCTransaction is a short-lived server-side Authorization Code transaction.

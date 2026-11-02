@@ -30,6 +30,14 @@ Configure `TELEGRAM_OIDC_CLIENT_ID`, `TELEGRAM_OIDC_CLIENT_SECRET`, `TELEGRAM_OI
 
 The SPA must implement the ticket-fragment exchange to establish its bearer-token session. This backend change does not alter the Vue application.
 
+Authenticated users can set a standalone login and password with `PUT /api/v1/auth/credentials` and a bearer access token:
+
+```json
+{"login":"my-login","password":"at-least-8-characters"}
+```
+
+Logins are normalized to lowercase and allow 3-64 letters, digits, dots, underscores, or hyphens. Passwords are stored as bcrypt hashes. Subsequent password login uses `POST /api/v1/auth/login` with `{"login":"my-login","password":"..."}`. The existing `telegram` login field remains supported for accounts that predate standalone logins. A global `API_KEY` is not needed for user authentication; the issued bearer token is the per-user credential.
+
 `internal/app` constructs repositories and services. `internal/httpapi` registers routes. Feature services own business decisions and repositories own SQL. Dependencies should flow from app and HTTP code toward features and database code, without feature import cycles.
 
 ## Checks

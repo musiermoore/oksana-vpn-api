@@ -35,6 +35,24 @@ func (r *Repository) FindByTelegram(ctx context.Context, telegram string) (User,
 	return user, err
 }
 
+func (r *Repository) FindByLogin(ctx context.Context, login string) (User, error) {
+	var user User
+	err := builder.Query(r.db, ctx).
+		Table(usersTable).
+		Select("id", "password").
+		Where("login", "=", login).
+		First(&user)
+	return user, err
+}
+
+func (r *Repository) SetCredentials(ctx context.Context, userID int64, login, passwordHash string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE users SET login = ?, password = ?, updated_at = UTC_TIMESTAMP(6) WHERE id = ?`,
+		login, passwordHash, userID,
+	)
+	return err
+}
+
 func (r *Repository) FindOrCreateByTelegramID(ctx context.Context, id, name string, telegram *string) (User, error) {
 	user, err := r.FindByTelegramID(ctx, id)
 	if err == nil {

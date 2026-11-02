@@ -84,5 +84,6 @@ func NewRouterWithOIDC(
 	protected.Use(auth.RequireAuth(authService))
 	protected.GET("/me", accountHandler.Me)
 	protected.POST("/logout", authHandler.Logout)
+	protected.PUT("/credentials", authHandler.SetCredentials)
 	return r
 }

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/musiermoore/oksana-vpn-api/internal/referral"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -20,6 +21,7 @@ var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrInvalidToken       = errors.New("invalid token")
 	ErrTokenCreation      = errors.New("failed to create token")
+	ErrLoginTaken         = errors.New("login is already in use")
 )
 
 type Service struct {
@@ -41,7 +43,11 @@ func tokenHash(token string) (string, error) {
 }
 
 func (s *Service) Login(ctx context.Context, telegram, password string) (string, time.Time, error) {
-	user, err := s.repo.FindByTelegram(ctx, telegram)
+	user, err := s.repo.FindByLogin(ctx, strings.ToLower(strings.TrimSpace(telegram)))
+	if errors.Is(err, sql.ErrNoRows) {
+		// Keep accounts created before login credentials were introduced able to log in.
+		user, err = s.repo.FindByTelegram(ctx, telegram)
+	}
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", time.Time{}, ErrInvalidCredentials
 	}
@@ -56,6 +62,21 @@ func (s *Service) Login(ctx context.Context, telegram, password string) (string,
 		return "", time.Time{}, ErrTokenCreation
 	}
 	return token, expiresAt, nil
+}
+
+func (s *Service) SetCredentials(ctx context.Context, userID int64, login, password string) error {
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	if err := s.repo.SetCredentials(ctx, userID, login, string(hash)); err != nil {
+		var mysqlErr *mysql.MySQLError
+		if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 {
+			return ErrLoginTaken
+		}
+		return err
+	}
+	return nil
 }
 
 // Authenticate validates a token and returns the identity used by protected routes.
