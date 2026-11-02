@@ -317,11 +317,18 @@ func TestTelegramOIDCJWKSVerifiesSignatureAndClaims(t *testing.T) {
 	if _, err := verifier.Verify(context.Background(), signTestJWT(t, privateKey, claims), "nonce-1"); !errors.Is(err, ErrOIDCIdentity) || !strings.Contains(err.Error(), "audience mismatch") {
 		t.Fatalf("invalid audience error=%v", err)
 	}
-	claims["aud"], claims["exp"] = "client-id", time.Now().Add(-time.Minute).Unix()
+	claims["aud"], claims["exp"] = "client-id", time.Now().Add(-2*time.Minute).Unix()
 	if _, err := verifier.Verify(context.Background(), signTestJWT(t, privateKey, claims), "nonce-1"); !errors.Is(err, ErrOIDCIdentity) || !strings.Contains(err.Error(), "ID token has expired") {
 		t.Fatalf("expired token error=%v", err)
 	}
-	claims["exp"], claims["aud"] = time.Now().Add(time.Minute).Unix(), "client-id"
+	claims["aud"] = "client-id"
+	claims["iat"] = time.Now().Add(-2 * time.Minute).Unix()
+	claims["exp"] = time.Now().Add(-30 * time.Second).Unix()
+	if _, err := verifier.Verify(context.Background(), signTestJWT(t, privateKey, claims), "nonce-1"); err != nil {
+		t.Fatalf("token within allowed clock skew rejected: %v", err)
+	}
+	claims["iat"] = time.Now().Unix()
+	claims["exp"] = time.Now().Add(time.Minute).Unix()
 	if _, err := verifier.Verify(context.Background(), signTestJWT(t, privateKey, claims), "wrong-nonce"); !errors.Is(err, ErrOIDCIdentity) || !strings.Contains(err.Error(), "nonce mismatch") {
 		t.Fatalf("invalid nonce error=%v", err)
 	}

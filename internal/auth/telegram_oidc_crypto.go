@@ -97,6 +97,8 @@ type telegramIDTokenVerifier struct {
 	loadedAt time.Time
 }
 
+const oidcClockSkew = 60 * time.Second
+
 func newTelegramIDTokenVerifier(clientID string) *telegramIDTokenVerifier {
 	return &telegramIDTokenVerifier{clientID: clientID, client: &http.Client{Timeout: 8 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
 }
@@ -162,7 +164,7 @@ func (v *telegramIDTokenVerifier) Verify(ctx context.Context, compact, expectedN
 	if claims.Subject == "" {
 		return telegramOIDCClaims{}, oidcIdentityError("subject is missing")
 	}
-	if claims.ExpiresAt <= now {
+	if claims.ExpiresAt <= now-int64(oidcClockSkew.Seconds()) {
 		return telegramOIDCClaims{}, oidcIdentityError("ID token has expired")
 	}
 	if claims.IssuedAt <= 0 || claims.IssuedAt > now+60 || claims.ExpiresAt <= claims.IssuedAt {
