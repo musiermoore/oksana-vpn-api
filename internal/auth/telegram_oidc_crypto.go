@@ -69,6 +69,12 @@ type telegramOIDCClaims struct {
 
 type audienceClaim []string
 
+var errUnknownTelegramSigningKey = errors.New("unknown Telegram signing key")
+
+func oidcIdentityError(reason string) error {
+	return fmt.Errorf("%w: %s", ErrOIDCIdentity, reason)
+}
+
 func (a *audienceClaim) UnmarshalJSON(data []byte) error {
 	var one string
 	if err := json.Unmarshal(data, &one); err == nil {
@@ -99,55 +105,78 @@ func (v *telegramIDTokenVerifier) Verify(ctx context.Context, compact, expectedN
 	var claims telegramOIDCClaims
 	parts := strings.Split(compact, ".")
 	if len(parts) != 3 {
-		return claims, ErrOIDCIdentity
+		return claims, oidcIdentityError("malformed ID token")
 	}
 	headerBytes, err := base64.RawURLEncoding.DecodeString(parts[0])
 	if err != nil {
-		return claims, ErrOIDCIdentity
+		return claims, oidcIdentityError("malformed ID token header")
 	}
 	var header struct {
 		Algorithm string `json:"alg"`
 		KeyID     string `json:"kid"`
 	}
-	if json.Unmarshal(headerBytes, &header) != nil || header.Algorithm != "RS256" || header.KeyID == "" {
-		return claims, ErrOIDCIdentity
+	if json.Unmarshal(headerBytes, &header) != nil {
+		return claims, oidcIdentityError("malformed ID token header")
+	}
+	if header.Algorithm != "RS256" {
+		return claims, oidcIdentityError("unsupported signing algorithm")
+	}
+	if header.KeyID == "" {
+		return claims, oidcIdentityError("missing signing key identifier")
 	}
 	key, err := v.key(ctx, header.KeyID, false)
 	if err != nil {
 		key, err = v.key(ctx, header.KeyID, true)
 	}
 	if err != nil || key == nil {
-		return claims, ErrOIDCIdentity
+		if errors.Is(err, errUnknownTelegramSigningKey) {
+			return claims, oidcIdentityError("signing key not found in Telegram JWKS")
+		}
+		return claims, fmt.Errorf("%w: unable to load Telegram signing keys", ErrOIDCProvider)
 	}
 	signature, err := base64.RawURLEncoding.DecodeString(parts[2])
 	if err != nil {
-		return claims, ErrOIDCIdentity
+		return claims, oidcIdentityError("malformed ID token signature")
 	}
 	digest := sha256.Sum256([]byte(parts[0] + "." + parts[1]))
 	if rsa.VerifyPKCS1v15(key, crypto.SHA256, digest[:], signature) != nil {
-		return claims, ErrOIDCIdentity
+		return claims, oidcIdentityError("signature verification failed")
 	}
 	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil || json.Unmarshal(payload, &claims) != nil {
-		return claims, ErrOIDCIdentity
+		return claims, oidcIdentityError("malformed ID token claims")
 	}
 	now := time.Now().Unix()
-	validAudience, hasClient := false, false
+	validAudience := false
 	for _, aud := range claims.Audience {
 		if aud == v.clientID {
 			validAudience = true
 		}
-		if aud == v.clientID {
-			hasClient = true
-		}
 	}
-	if claims.Issuer != "https://oauth.telegram.org" || !validAudience || claims.Subject == "" ||
-		claims.ExpiresAt <= now || claims.IssuedAt <= 0 || claims.IssuedAt > now+60 || claims.ExpiresAt <= claims.IssuedAt ||
-		claims.Nonce == "" || claims.Nonce != expectedNonce || len(claims.Audience) == 0 || !hasClient ||
-		(claims.NotBefore != 0 && claims.NotBefore > now+60) ||
-		(claims.AuthorizedParty != "" && claims.AuthorizedParty != v.clientID) ||
+	if claims.Issuer != "https://oauth.telegram.org" {
+		return telegramOIDCClaims{}, oidcIdentityError("issuer mismatch")
+	}
+	if !validAudience || len(claims.Audience) == 0 {
+		return telegramOIDCClaims{}, oidcIdentityError("audience mismatch")
+	}
+	if claims.Subject == "" {
+		return telegramOIDCClaims{}, oidcIdentityError("subject is missing")
+	}
+	if claims.ExpiresAt <= now {
+		return telegramOIDCClaims{}, oidcIdentityError("ID token has expired")
+	}
+	if claims.IssuedAt <= 0 || claims.IssuedAt > now+60 || claims.ExpiresAt <= claims.IssuedAt {
+		return telegramOIDCClaims{}, oidcIdentityError("issued-at claim is invalid")
+	}
+	if claims.NotBefore != 0 && claims.NotBefore > now+60 {
+		return telegramOIDCClaims{}, oidcIdentityError("ID token is not yet valid")
+	}
+	if claims.Nonce == "" || claims.Nonce != expectedNonce {
+		return telegramOIDCClaims{}, oidcIdentityError("nonce mismatch")
+	}
+	if (claims.AuthorizedParty != "" && claims.AuthorizedParty != v.clientID) ||
 		(len(claims.Audience) > 1 && claims.AuthorizedParty != v.clientID) {
-		return telegramOIDCClaims{}, ErrOIDCIdentity
+		return telegramOIDCClaims{}, oidcIdentityError("authorized-party mismatch")
 	}
 	return claims, nil
 }
@@ -159,7 +188,7 @@ func (v *telegramIDTokenVerifier) key(ctx context.Context, kid string, forceRefr
 		if key := v.keys[kid]; key != nil {
 			return key, nil
 		}
-		return nil, errors.New("unknown Telegram signing key")
+		return nil, errUnknownTelegramSigningKey
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, telegramOIDCJWKSURL, nil)
 	if err != nil {
@@ -212,5 +241,5 @@ func (v *telegramIDTokenVerifier) key(ctx context.Context, kid string, forceRefr
 	if key := v.keys[kid]; key != nil {
 		return key, nil
 	}
-	return nil, errors.New("unknown Telegram signing key")
+	return nil, errUnknownTelegramSigningKey
 }

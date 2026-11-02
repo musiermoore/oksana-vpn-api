@@ -310,16 +310,20 @@ func TestTelegramOIDCJWKSVerifiesSignatureAndClaims(t *testing.T) {
 	}
 	parts := strings.Split(compact, ".")
 	badSig := parts[0] + "." + parts[1] + "." + encode([]byte("invalid"))
-	if _, err := verifier.Verify(context.Background(), badSig, "nonce-1"); !errors.Is(err, ErrOIDCIdentity) {
+	if _, err := verifier.Verify(context.Background(), badSig, "nonce-1"); !errors.Is(err, ErrOIDCIdentity) || !strings.Contains(err.Error(), "signature verification failed") {
 		t.Fatalf("invalid signature error=%v", err)
 	}
 	claims["aud"] = "another-client"
-	if _, err := verifier.Verify(context.Background(), signTestJWT(t, privateKey, claims), "nonce-1"); !errors.Is(err, ErrOIDCIdentity) {
+	if _, err := verifier.Verify(context.Background(), signTestJWT(t, privateKey, claims), "nonce-1"); !errors.Is(err, ErrOIDCIdentity) || !strings.Contains(err.Error(), "audience mismatch") {
 		t.Fatalf("invalid audience error=%v", err)
 	}
 	claims["aud"], claims["exp"] = "client-id", time.Now().Add(-time.Minute).Unix()
-	if _, err := verifier.Verify(context.Background(), signTestJWT(t, privateKey, claims), "nonce-1"); !errors.Is(err, ErrOIDCIdentity) {
+	if _, err := verifier.Verify(context.Background(), signTestJWT(t, privateKey, claims), "nonce-1"); !errors.Is(err, ErrOIDCIdentity) || !strings.Contains(err.Error(), "ID token has expired") {
 		t.Fatalf("expired token error=%v", err)
+	}
+	claims["exp"], claims["aud"] = time.Now().Add(time.Minute).Unix(), "client-id"
+	if _, err := verifier.Verify(context.Background(), signTestJWT(t, privateKey, claims), "wrong-nonce"); !errors.Is(err, ErrOIDCIdentity) || !strings.Contains(err.Error(), "nonce mismatch") {
+		t.Fatalf("invalid nonce error=%v", err)
 	}
 }
 
