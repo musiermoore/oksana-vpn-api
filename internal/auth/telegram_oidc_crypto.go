@@ -13,6 +13,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -55,16 +56,18 @@ func (e *telegramTokenExchanger) Exchange(ctx context.Context, code, verifier st
 }
 
 type telegramOIDCClaims struct {
-	Issuer          string        `json:"iss"`
-	Audience        audienceClaim `json:"aud"`
-	Subject         string        `json:"sub"`
-	AuthorizedParty string        `json:"azp,omitempty"`
-	ExpiresAt       int64         `json:"exp"`
-	IssuedAt        int64         `json:"iat"`
-	NotBefore       int64         `json:"nbf,omitempty"`
-	Nonce           string        `json:"nonce"`
-	Name            string        `json:"name"`
-	Username        string        `json:"preferred_username"`
+	Issuer          string          `json:"iss"`
+	Audience        audienceClaim   `json:"aud"`
+	Subject         string          `json:"sub"`
+	AuthorizedParty string          `json:"azp,omitempty"`
+	ExpiresAt       int64           `json:"exp"`
+	IssuedAt        int64           `json:"iat"`
+	NotBefore       int64           `json:"nbf,omitempty"`
+	Nonce           string          `json:"nonce"`
+	Name            string          `json:"name"`
+	Username        string          `json:"preferred_username"`
+	ProfileID       json.RawMessage `json:"id,omitempty"`
+	TelegramID      string          `json:"-"`
 }
 
 type audienceClaim []string
@@ -148,6 +151,11 @@ func (v *telegramIDTokenVerifier) Verify(ctx context.Context, compact, expectedN
 	if err != nil || json.Unmarshal(payload, &claims) != nil {
 		return claims, oidcIdentityError("malformed ID token claims")
 	}
+	telegramID, err := parseTelegramOIDCProfileID(claims.ProfileID)
+	if err != nil {
+		return telegramOIDCClaims{}, oidcIdentityError("invalid Telegram profile ID")
+	}
+	claims.TelegramID = telegramID
 	now := time.Now().Unix()
 	validAudience := false
 	for _, aud := range claims.Audience {
@@ -181,6 +189,29 @@ func (v *telegramIDTokenVerifier) Verify(ctx context.Context, compact, expectedN
 		return telegramOIDCClaims{}, oidcIdentityError("authorized-party mismatch")
 	}
 	return claims, nil
+}
+
+func parseTelegramOIDCProfileID(raw json.RawMessage) (string, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return "", nil
+	}
+	var id json.Number
+	if err := json.Unmarshal(raw, &id); err == nil {
+		value, err := strconv.ParseUint(id.String(), 10, 64)
+		if err != nil || value == 0 {
+			return "", errors.New("invalid Telegram profile ID")
+		}
+		return strconv.FormatUint(value, 10), nil
+	}
+	var stringID string
+	if err := json.Unmarshal(raw, &stringID); err != nil {
+		return "", errors.New("invalid Telegram profile ID")
+	}
+	value, err := strconv.ParseUint(stringID, 10, 64)
+	if err != nil || value == 0 {
+		return "", errors.New("invalid Telegram profile ID")
+	}
+	return strconv.FormatUint(value, 10), nil
 }
 
 func (v *telegramIDTokenVerifier) key(ctx context.Context, kid string, forceRefresh bool) (*rsa.PublicKey, error) {

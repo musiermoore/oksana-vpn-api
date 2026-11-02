@@ -23,15 +23,17 @@ import (
 )
 
 type fakeOIDCStore struct {
-	txns         map[string]oidcTransaction
-	users        map[string]User
-	tickets      map[string]int64
-	provisions   int
-	provisionErr error
+	txns                 map[string]oidcTransaction
+	users                map[string]User
+	telegramUsers        map[string]User
+	ambiguousTelegramIDs map[string]bool
+	tickets              map[string]int64
+	provisions           int
+	provisionErr         error
 }
 
 func newFakeOIDCStore() *fakeOIDCStore {
-	return &fakeOIDCStore{txns: map[string]oidcTransaction{}, users: map[string]User{}, tickets: map[string]int64{}}
+	return &fakeOIDCStore{txns: map[string]oidcTransaction{}, users: map[string]User{}, telegramUsers: map[string]User{}, ambiguousTelegramIDs: map[string]bool{}, tickets: map[string]int64{}}
 }
 func (s *fakeOIDCStore) CreateOIDCTransaction(_ context.Context, hash string, tx oidcTransaction) error {
 	s.txns[hash] = tx
@@ -46,23 +48,47 @@ func (s *fakeOIDCStore) ConsumeOIDCTransaction(_ context.Context, hash string, n
 	delete(s.txns, hash)
 	return tx, nil
 }
-func (s *fakeOIDCStore) FindUserByOIDCSubject(_ context.Context, subject string) (User, error) {
-	user, ok := s.users[subject]
-	if !ok {
-		return User{}, ErrOIDCIdentity
+func (s *fakeOIDCStore) ResolveOIDCUser(_ context.Context, subject, telegramID, name, username string) (User, error) {
+	if s.ambiguousTelegramIDs[telegramID] {
+		return User{}, ErrOIDCIdentityConflict
 	}
-	return user, nil
-}
-func (s *fakeOIDCStore) ProvisionOIDCUser(_ context.Context, subject, name, _ string) (User, error) {
+	if user, ok := s.users[subject]; ok {
+		if telegramID == "" || (user.TelegramID != nil && *user.TelegramID == telegramID) {
+			return user, nil
+		}
+		if target, found := s.telegramUsers[telegramID]; found && target.ID != user.ID {
+			s.users[subject] = target
+			return target, nil
+		}
+		if user.TelegramID != nil && *user.TelegramID != telegramID {
+			return User{}, ErrOIDCIdentityConflict
+		}
+		user.TelegramID = &telegramID
+		s.users[subject] = user
+		return user, nil
+	}
+	if telegramID != "" {
+		if user, ok := s.telegramUsers[telegramID]; ok {
+			s.users[subject] = user
+			return user, nil
+		}
+	}
 	s.provisions++
 	if s.provisionErr != nil {
 		return User{}, s.provisionErr
 	}
-	if user, ok := s.users[subject]; ok {
-		return user, nil
-	}
 	user := User{ID: int64(len(s.users) + 1), Name: name}
+	if telegramID != "" {
+		user.TelegramID = &telegramID
+	}
+	if username != "" {
+		value := "@" + strings.TrimPrefix(username, "@")
+		user.Telegram = &value
+	}
 	s.users[subject] = user
+	if telegramID != "" {
+		s.telegramUsers[telegramID] = user
+	}
 	return user, nil
 }
 func (s *fakeOIDCStore) CreateOIDCLoginTicket(_ context.Context, hash string, userID int64, _ time.Time) error {
@@ -117,7 +143,7 @@ func (i *fakeTokenIssuer) CreateToken(_ context.Context, id int64) (string, time
 func TestTelegramOIDCLoginProvisionAndTicketExchange(t *testing.T) {
 	store := newFakeOIDCStore()
 	exchanger := &fakeOIDCExchange{token: "signed-id-token"}
-	verifier := &fakeOIDCVerifier{claims: telegramOIDCClaims{Subject: "subject-123", Name: "Telegram Name", Username: "sample"}}
+	verifier := &fakeOIDCVerifier{claims: telegramOIDCClaims{Subject: "subject-123", TelegramID: "123456", Name: "Telegram Name", Username: "sample"}}
 	issuer := &fakeTokenIssuer{token: "api-bearer", expires: time.Now().Add(time.Hour)}
 	flow := &telegramOIDCFlow{issuer: issuer, config: TelegramOIDCConfig{ClientID: "client", ClientSecret: "secret", RedirectURI: "https://api.example/callback", ReturnURLs: []string{"https://app.example/login"}}, store: store, exchanger: exchanger, verifier: verifier}
 	start, err := flow.start(context.Background(), flow.config.ReturnURLs[0])
@@ -143,6 +169,9 @@ func TestTelegramOIDCLoginProvisionAndTicketExchange(t *testing.T) {
 	}
 	if store.provisions != 1 {
 		t.Fatalf("provisions=%d, want 1", store.provisions)
+	}
+	if got := store.users["subject-123"].TelegramID; got == nil || *got != "123456" {
+		t.Fatalf("provisioned Telegram ID=%v, want 123456", got)
 	}
 	token, _, err := flow.exchangeTicket(context.Background(), ticket)
 	if err != nil || token != "api-bearer" || issuer.userID != 1 {
@@ -253,6 +282,70 @@ func TestTelegramOIDCExistingIdentityAndConflict(t *testing.T) {
 	}
 }
 
+func TestTelegramOIDCMatchesAndReconcilesExactVerifiedTelegramID(t *testing.T) {
+	store := newFakeOIDCStore()
+	legacyID := "987654321"
+	legacyUser := User{ID: 73, Name: "Subscribed account", TelegramID: &legacyID}
+	store.telegramUsers[legacyID] = legacyUser
+	flow := &telegramOIDCFlow{
+		issuer: &fakeTokenIssuer{},
+		config: TelegramOIDCConfig{ClientID: "client", ReturnURLs: []string{"https://app.example"}},
+		store:  store, exchanger: &fakeOIDCExchange{token: "id-token"},
+		verifier: &fakeOIDCVerifier{claims: telegramOIDCClaims{Subject: "stable-sub", TelegramID: legacyID}},
+	}
+	start, _ := flow.start(context.Background(), flow.config.ReturnURLs[0])
+	startURL, _ := url.Parse(start)
+	state := startURL.Query().Get("state")
+	flow.verifier.(*fakeOIDCVerifier).claims.Nonce = store.txns[sha256Hex(state)].Nonce
+	ticket, _, err := flow.complete(context.Background(), state, "code")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if store.users["stable-sub"].ID != legacyUser.ID || store.provisions != 0 {
+		t.Fatalf("OIDC identity was not attached to the existing account: mapped=%+v provisions=%d", store.users["stable-sub"], store.provisions)
+	}
+	if got := store.tickets[sha256Hex(ticket)]; got != legacyUser.ID {
+		t.Fatalf("ticket user ID=%d, want existing account %d", got, legacyUser.ID)
+	}
+
+	// A previous OIDC-only provision is reconciled to the exact verified legacy Telegram ID.
+	store = newFakeOIDCStore()
+	store.users["stable-sub"] = User{ID: 204, Name: "Telegram user"}
+	store.telegramUsers[legacyID] = legacyUser
+	flow.store = store
+	start, _ = flow.start(context.Background(), flow.config.ReturnURLs[0])
+	startURL, _ = url.Parse(start)
+	state = startURL.Query().Get("state")
+	flow.verifier.(*fakeOIDCVerifier).claims.Nonce = store.txns[sha256Hex(state)].Nonce
+	ticket, _, err = flow.complete(context.Background(), state, "code")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if store.users["stable-sub"].ID != legacyUser.ID {
+		t.Fatalf("provisional identity remained on user %d; want user %d", store.users["stable-sub"].ID, legacyUser.ID)
+	}
+	if got := store.tickets[sha256Hex(ticket)]; got != legacyUser.ID {
+		t.Fatalf("reconciled ticket user ID=%d, want %d", got, legacyUser.ID)
+	}
+}
+
+func TestTelegramOIDCRejectsAmbiguousTelegramIDMatch(t *testing.T) {
+	store := newFakeOIDCStore()
+	store.ambiguousTelegramIDs["12345"] = true
+	verifier := &fakeOIDCVerifier{claims: telegramOIDCClaims{Subject: "sub", TelegramID: "12345"}}
+	flow := &telegramOIDCFlow{
+		config: TelegramOIDCConfig{ClientID: "client", ReturnURLs: []string{"https://app.example"}},
+		store:  store, exchanger: &fakeOIDCExchange{token: "id-token"}, verifier: verifier,
+	}
+	start, _ := flow.start(context.Background(), flow.config.ReturnURLs[0])
+	u, _ := url.Parse(start)
+	state := u.Query().Get("state")
+	verifier.claims.Nonce = store.txns[sha256Hex(state)].Nonce
+	if _, _, err := flow.complete(context.Background(), state, "code"); !errors.Is(err, ErrOIDCIdentityConflict) {
+		t.Fatalf("ambiguous Telegram ID error=%v", err)
+	}
+}
+
 func TestTelegramOIDCRejectsWrongStateNonceExpiredAndReusedCallback(t *testing.T) {
 	store := newFakeOIDCStore()
 	flow := &telegramOIDCFlow{config: TelegramOIDCConfig{ClientID: "client", ReturnURLs: []string{"https://app.example"}}, store: store, exchanger: &fakeOIDCExchange{token: "id-token"}, verifier: &fakeOIDCVerifier{claims: telegramOIDCClaims{Subject: "sub"}}}
@@ -302,10 +395,10 @@ func TestTelegramOIDCJWKSVerifiesSignatureAndClaims(t *testing.T) {
 		}
 		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(jwks)), Header: make(http.Header)}, nil
 	})
-	claims := map[string]any{"iss": "https://oauth.telegram.org", "aud": "client-id", "sub": "stable-subject", "iat": time.Now().Unix(), "exp": time.Now().Add(time.Minute).Unix(), "nonce": "nonce-1"}
+	claims := map[string]any{"iss": "https://oauth.telegram.org", "aud": "client-id", "sub": "stable-subject", "id": 123456789, "iat": time.Now().Unix(), "exp": time.Now().Add(time.Minute).Unix(), "nonce": "nonce-1"}
 	compact := signTestJWT(t, privateKey, claims)
 	got, err := verifier.Verify(context.Background(), compact, "nonce-1")
-	if err != nil || got.Subject != "stable-subject" {
+	if err != nil || got.Subject != "stable-subject" || got.TelegramID != "123456789" {
 		t.Fatalf("valid token rejected: %+v %v", got, err)
 	}
 	parts := strings.Split(compact, ".")

@@ -208,51 +208,108 @@ func (r *Repository) ConsumeOIDCTransaction(ctx context.Context, stateHash strin
 	return result, nil
 }
 
-func (r *Repository) FindUserByOIDCSubject(ctx context.Context, subject string) (User, error) {
-	var user User
-	err := builder.Query(r.db, ctx).
-		Table("users u").
-		Select("u.id", "u.uuid", "u.name", "u.telegram", "u.telegram_id", "u.referrer_id", "u.join_at", "u.referral_accumulated_discount_percent").
-		InnerJoin("telegram_oidc_identities i", "i.user_id", "=", "u.id").
-		Where("i.subject", "=", subject).
-		First(&user)
-	if errors.Is(err, sql.ErrNoRows) {
-		return User{}, ErrOIDCIdentity
-	}
-	return user, err
-}
-
-func (r *Repository) ProvisionOIDCUser(ctx context.Context, subject, name, username string) (User, error) {
+func (r *Repository) ResolveOIDCUser(ctx context.Context, subject, telegramID, name, username string) (User, error) {
 	if strings.TrimSpace(subject) == "" {
 		return User{}, ErrOIDCIdentity
 	}
 	name = strings.TrimSpace(name)
+	username = strings.TrimPrefix(strings.TrimSpace(username), "@")
+	var telegram *string
+	if username != "" {
+		value := "@" + username
+		telegram = &value
+	}
 	if name == "" {
-		name = strings.TrimSpace(username)
+		name = username
 	}
 	if name == "" {
 		name = "Telegram user"
 	}
-	username = strings.TrimPrefix(strings.TrimSpace(username), "@")
+
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return User{}, err
 	}
 	defer tx.Rollback()
-	// The subject is the only matching key. Profile fields are display data only.
-	var existing User
-	err = tx.QueryRowContext(ctx, `SELECT u.id, u.uuid, u.name, u.telegram, u.telegram_id, u.referrer_id, u.join_at, u.referral_accumulated_discount_percent
-		FROM users u INNER JOIN telegram_oidc_identities i ON i.user_id = u.id WHERE i.subject = ? FOR UPDATE`, subject).Scan(
-		&existing.ID, &existing.UUID, &existing.Name, &existing.Telegram, &existing.TelegramID, &existing.ReferrerID, &existing.JoinAt, &existing.ReferralAccumulatedDiscountPercent)
-	if err == nil {
-		return existing, nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
+	now := time.Now().UTC()
+
+	var mapped User
+	err = scanOIDCUser(tx.QueryRowContext(ctx, `SELECT u.id, u.uuid, u.name, u.telegram, u.telegram_id, u.referrer_id, u.join_at, u.referral_accumulated_discount_percent
+		FROM users u INNER JOIN telegram_oidc_identities i ON i.user_id = u.id WHERE i.subject = ? FOR UPDATE`, subject), &mapped)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return User{}, err
 	}
+	if err == nil {
+		if telegramID == "" {
+			return mapped, tx.Commit()
+		}
+		if mapped.TelegramID != nil && *mapped.TelegramID != "" {
+			if *mapped.TelegramID != telegramID {
+				return User{}, ErrOIDCIdentityConflict
+			}
+			return mapped, tx.Commit()
+		}
+	}
+
+	if telegramID != "" {
+		matches, findErr := findOIDCUsersByTelegramID(ctx, tx, telegramID)
+		if findErr != nil {
+			return User{}, findErr
+		}
+		if len(matches) > 1 {
+			return User{}, ErrOIDCIdentityConflict
+		}
+		if len(matches) == 1 {
+			target := matches[0]
+			if err == nil && target.ID != mapped.ID {
+				if err := ensureUserHasNoOtherOIDCIdentity(ctx, tx, target.ID, subject); err != nil {
+					return User{}, err
+				}
+				if _, err := tx.ExecContext(ctx, `UPDATE telegram_oidc_identities SET user_id = ? WHERE subject = ? AND user_id = ?`, target.ID, subject, mapped.ID); err != nil {
+					return User{}, ErrOIDCIdentityConflict
+				}
+				// Revoke the session issued for the temporary OIDC-only account.
+				if _, err := tx.ExecContext(ctx, `DELETE FROM `+authTokensTable+` WHERE user_id = ?`, mapped.ID); err != nil {
+					return User{}, err
+				}
+			} else if err != nil {
+				if err := ensureUserHasNoOtherOIDCIdentity(ctx, tx, target.ID, subject); err != nil {
+					return User{}, err
+				}
+				if _, err := tx.ExecContext(ctx, `INSERT INTO telegram_oidc_identities (subject, user_id, created_at) VALUES (?, ?, ?)`, subject, target.ID, now); err != nil {
+					return User{}, ErrOIDCIdentityConflict
+				}
+			}
+			if err := tx.Commit(); err != nil {
+				return User{}, err
+			}
+			return target, nil
+		}
+	}
+
+	if err == nil {
+		// This OIDC subject is already mapped to its own account and has no legacy-ID match.
+		if telegramID != "" {
+			if _, err := tx.ExecContext(ctx, `UPDATE users SET telegram_id = ?, telegram = COALESCE(telegram, ?), updated_at = ? WHERE id = ? AND (telegram_id IS NULL OR telegram_id = '')`, telegramID, telegram, now, mapped.ID); err != nil {
+				return User{}, err
+			}
+			mapped.TelegramID = &telegramID
+			if mapped.Telegram == nil {
+				mapped.Telegram = telegram
+			}
+		}
+		if err := tx.Commit(); err != nil {
+			return User{}, err
+		}
+		return mapped, nil
+	}
+
 	generatedUUID := uuid.New().String()
-	now := time.Now().UTC()
-	res, err := tx.ExecContext(ctx, `INSERT INTO users (uuid, name, join_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`, generatedUUID, name, now, now, now)
+	var telegramIDValue any
+	if telegramID != "" {
+		telegramIDValue = telegramID
+	}
+	res, err := tx.ExecContext(ctx, `INSERT INTO users (uuid, name, telegram, telegram_id, join_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`, generatedUUID, name, telegram, telegramIDValue, now, now, now)
 	if err != nil {
 		return User{}, err
 	}
@@ -266,7 +323,50 @@ func (r *Repository) ProvisionOIDCUser(ctx context.Context, subject, name, usern
 	if err = tx.Commit(); err != nil {
 		return User{}, err
 	}
-	return User{ID: userID, UUID: &generatedUUID, Name: name, JoinAt: &now}, nil
+	var telegramIDPtr *string
+	if telegramID != "" {
+		telegramIDPtr = &telegramID
+	}
+	return User{ID: userID, UUID: &generatedUUID, Name: name, Telegram: telegram, TelegramID: telegramIDPtr, JoinAt: &now}, nil
+}
+
+type rowScanner interface{ Scan(dest ...any) error }
+
+func scanOIDCUser(scanner rowScanner, user *User) error {
+	return scanner.Scan(&user.ID, &user.UUID, &user.Name, &user.Telegram, &user.TelegramID, &user.ReferrerID, &user.JoinAt, &user.ReferralAccumulatedDiscountPercent)
+}
+
+func findOIDCUsersByTelegramID(ctx context.Context, tx *sql.Tx, telegramID string) ([]User, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT id, uuid, name, telegram, telegram_id, referrer_id, join_at, referral_accumulated_discount_percent
+		FROM users WHERE telegram_id = ? ORDER BY id LIMIT 2 FOR UPDATE`, telegramID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	users := make([]User, 0, 2)
+	for rows.Next() {
+		var user User
+		if err := scanOIDCUser(rows, &user); err != nil {
+			return nil, err
+		}
+		users = append(users, user)
+	}
+	return users, rows.Err()
+}
+
+func ensureUserHasNoOtherOIDCIdentity(ctx context.Context, tx *sql.Tx, userID int64, subject string) error {
+	var existing string
+	err := tx.QueryRowContext(ctx, `SELECT subject FROM telegram_oidc_identities WHERE user_id = ? FOR UPDATE`, userID).Scan(&existing)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if existing != subject {
+		return ErrOIDCIdentityConflict
+	}
+	return nil
 }
 
 func (r *Repository) CreateOIDCLoginTicket(ctx context.Context, ticketHash string, userID int64, expiresAt time.Time) error {

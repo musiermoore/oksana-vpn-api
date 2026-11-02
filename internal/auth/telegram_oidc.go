@@ -70,8 +70,7 @@ type oidcTransaction struct {
 type telegramOIDCStore interface {
 	CreateOIDCTransaction(context.Context, string, oidcTransaction) error
 	ConsumeOIDCTransaction(context.Context, string, time.Time) (oidcTransaction, error)
-	FindUserByOIDCSubject(context.Context, string) (User, error)
-	ProvisionOIDCUser(context.Context, string, string, string) (User, error)
+	ResolveOIDCUser(context.Context, string, string, string, string) (User, error)
 	CreateOIDCLoginTicket(context.Context, string, int64, time.Time) error
 	ConsumeOIDCLoginTicket(context.Context, string, time.Time) (int64, error)
 }
@@ -290,10 +289,7 @@ func (f *telegramOIDCFlow) complete(ctx context.Context, state, code string) (st
 	if err != nil {
 		return "", "", err
 	}
-	user, err := f.store.FindUserByOIDCSubject(ctx, claims.Subject)
-	if errors.Is(err, ErrOIDCIdentity) {
-		user, err = f.store.ProvisionOIDCUser(ctx, claims.Subject, claims.Name, claims.Username)
-	}
+	user, err := f.store.ResolveOIDCUser(ctx, claims.Subject, claims.TelegramID, claims.Name, claims.Username)
 	if err != nil {
 		return "", "", err
 	}
