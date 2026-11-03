@@ -51,6 +51,9 @@ func NewRouterWithOIDC(
 		AllowMethods: []string{
 			"GET",
 			"POST",
+			"PUT",
+			"PATCH",
+			"DELETE",
 			"OPTIONS",
 		},
 		AllowHeaders: []string{
