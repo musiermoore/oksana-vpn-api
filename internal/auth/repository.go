@@ -284,7 +284,7 @@ func (r *Repository) ResolveOIDCUser(ctx context.Context, subject, telegramID, n
 					return User{}, ErrOIDCIdentityConflict
 				}
 				// Revoke the session issued for the temporary OIDC-only account.
-				if _, err := tx.ExecContext(ctx, `DELETE FROM `+authTokensTable+` WHERE user_id = ?`, mapped.ID); err != nil {
+				if _, err := tx.ExecContext(ctx, `DELETE FROM `+userTokensTable+` WHERE user_id = ?`, mapped.ID); err != nil {
 					return User{}, err
 				}
 			} else if err != nil {
