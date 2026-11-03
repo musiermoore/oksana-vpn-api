@@ -147,47 +147,51 @@ func (r *Repository) FindByTelegramID(ctx context.Context, id string) (User, err
 	return user, err
 }
 
-func (r *Repository) CreateToken(ctx context.Context, userID int64, token string, expiresAt time.Time, source TokenSource) error {
+func (r *Repository) CreateToken(ctx context.Context, userID int64, hash string, expiresAt time.Time, source TokenSource) error {
 	now := time.Now().UTC()
 	return builder.Query(r.db, ctx).
-		Table(userTokensTable).
+		Table(authTokensTable).
 		Insert(AuthToken{
-			Token:     token,
-			UserID:    userID,
-			Source:    source,
-			ExpiresAt: expiresAt.UTC(),
-			CreatedAt: now,
-			UpdatedAt: now,
+			TokenHash:  hash,
+			UserID:     userID,
+			Source:     source,
+			ExpiresAt:  expiresAt.UTC(),
+			LastUsedAt: now,
+			CreatedAt:  now,
+			UpdatedAt:  now,
 		})
 }
 
-func (r *Repository) FindUserIDByToken(ctx context.Context, token string) (int64, error) {
+func (r *Repository) FindUserIDByToken(ctx context.Context, hash string) (int64, error) {
 	var result struct {
 		ID int64 `db:"id"`
 	}
 	err := builder.Query(r.db, ctx).
-		Table(userTokensTable+" t").
+		Table(authTokensTable+" t").
 		Select("u.id").
 		InnerJoin(usersTable+" u", "u.id", "=", "t.user_id").
-		Where("t.token", "=", token).
+		Where("t.token_hash", "=", hash).
 		Where("t.expires_at", ">", expression.Raw("UTC_TIMESTAMP(6)")).
 		First(&result)
 	return result.ID, err
 }
 
-func (r *Repository) DeleteToken(ctx context.Context, token string) error {
+func (r *Repository) DeleteToken(ctx context.Context, hash string) error {
 	return builder.Query(r.db, ctx).
-		Table(userTokensTable).
-		Where("token", "=", token).
+		Table(authTokensTable).
+		Where("token_hash", "=", hash).
 		Delete()
 }
 
-func (r *Repository) UpdateTokenUpdatedAt(ctx context.Context, token string) error {
+func (r *Repository) UpdateLastUsedAt(ctx context.Context, hash string) error {
 	now := time.Now().UTC()
 	return builder.Query(r.db, ctx).
-		Table(userTokensTable).
-		Where("token", "=", token).
-		Update(AuthToken{UpdatedAt: now}, "updated_at")
+		Table(authTokensTable).
+		Where("token_hash", "=", hash).
+		Update(AuthToken{
+			LastUsedAt: now,
+			UpdatedAt:  now,
+		}, "last_used_at", "updated_at")
 }
 
 func (r *Repository) CreateOIDCTransaction(ctx context.Context, stateHash string, tx oidcTransaction) error {
@@ -284,7 +288,7 @@ func (r *Repository) ResolveOIDCUser(ctx context.Context, subject, telegramID, n
 					return User{}, ErrOIDCIdentityConflict
 				}
 				// Revoke the session issued for the temporary OIDC-only account.
-				if _, err := tx.ExecContext(ctx, `DELETE FROM `+userTokensTable+` WHERE user_id = ?`, mapped.ID); err != nil {
+				if _, err := tx.ExecContext(ctx, `DELETE FROM `+authTokensTable+` WHERE user_id = ?`, mapped.ID); err != nil {
 					return User{}, err
 				}
 			} else if err != nil {
