@@ -39,6 +39,14 @@ func tokenHash(token string) (string, error) {
 		return "", ErrInvalidToken
 	}
 	sum := sha256.Sum256([]byte(token))
+	return base64.RawURLEncoding.EncodeToString(sum[:]), nil
+}
+
+func legacyTokenHash(token string) (string, error) {
+	if _, err := tokenHash(token); err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:]), nil
 }
 
@@ -85,14 +93,22 @@ func (s *Service) Authenticate(ctx context.Context, token string) (int64, error)
 	if err != nil {
 		return 0, err
 	}
+	storedToken := hash
 	userID, err := s.repo.FindUserIDByToken(ctx, hash)
+	if errors.Is(err, sql.ErrNoRows) {
+		// Accept sessions created before hashes were stored in base64url form.
+		storedToken, err = legacyTokenHash(token)
+		if err == nil {
+			userID, err = s.repo.FindUserIDByToken(ctx, storedToken)
+		}
+	}
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, ErrInvalidToken
 	}
 	if err != nil {
 		return 0, err
 	}
-	if err := s.repo.UpdateTokenUpdatedAt(ctx, hash); err != nil {
+	if err := s.repo.UpdateTokenUpdatedAt(ctx, storedToken); err != nil {
 		log.Printf("WARNING: token updated_at failed to update: %v", err)
 	}
 	return userID, nil
@@ -103,7 +119,14 @@ func (s *Service) Logout(ctx context.Context, token string) error {
 	if err != nil {
 		return err
 	}
-	return s.repo.DeleteToken(ctx, hash)
+	if err := s.repo.DeleteToken(ctx, hash); err != nil {
+		return err
+	}
+	legacyHash, err := legacyTokenHash(token)
+	if err != nil {
+		return err
+	}
+	return s.repo.DeleteToken(ctx, legacyHash)
 }
 
 func (s *Service) GetOrCreateUserByTelegramID(ctx context.Context, telegramID, firstName, lastName, username string) (User, error) {
@@ -140,10 +163,12 @@ func (s *Service) CreateToken(ctx context.Context, userID int64, source TokenSou
 		return "", time.Time{}, err
 	}
 	token := base64.RawURLEncoding.EncodeToString(raw)
-	hash := sha256.Sum256([]byte(token))
-	storedHash := hex.EncodeToString(hash[:])
+	hash, err := tokenHash(token)
+	if err != nil {
+		return "", time.Time{}, err
+	}
 	expiresAt := time.Now().UTC().Add(30 * 24 * time.Hour)
-	if err := s.repo.CreateToken(ctx, userID, storedHash, expiresAt, source); err != nil {
+	if err := s.repo.CreateToken(ctx, userID, hash, expiresAt, source); err != nil {
 		return "", time.Time{}, err
 	}
 	return token, expiresAt, nil

@@ -147,12 +147,12 @@ func (r *Repository) FindByTelegramID(ctx context.Context, id string) (User, err
 	return user, err
 }
 
-func (r *Repository) CreateToken(ctx context.Context, userID int64, hash string, expiresAt time.Time, source TokenSource) error {
+func (r *Repository) CreateToken(ctx context.Context, userID int64, token string, expiresAt time.Time, source TokenSource) error {
 	now := time.Now().UTC()
 	return builder.Query(r.db, ctx).
 		Table(userTokensTable).
 		Insert(AuthToken{
-			Token:     hash,
+			Token:     token,
 			UserID:    userID,
 			Source:    source,
 			ExpiresAt: expiresAt.UTC(),
@@ -161,7 +161,7 @@ func (r *Repository) CreateToken(ctx context.Context, userID int64, hash string,
 		})
 }
 
-func (r *Repository) FindUserIDByToken(ctx context.Context, hash string) (int64, error) {
+func (r *Repository) FindUserIDByToken(ctx context.Context, token string) (int64, error) {
 	var result struct {
 		ID int64 `db:"id"`
 	}
@@ -169,24 +169,24 @@ func (r *Repository) FindUserIDByToken(ctx context.Context, hash string) (int64,
 		Table(userTokensTable+" t").
 		Select("u.id").
 		InnerJoin(usersTable+" u", "u.id", "=", "t.user_id").
-		Where("t.token", "=", hash).
+		Where("t.token", "=", token).
 		Where("t.expires_at", ">", expression.Raw("UTC_TIMESTAMP(6)")).
 		First(&result)
 	return result.ID, err
 }
 
-func (r *Repository) DeleteToken(ctx context.Context, hash string) error {
+func (r *Repository) DeleteToken(ctx context.Context, token string) error {
 	return builder.Query(r.db, ctx).
 		Table(userTokensTable).
-		Where("token", "=", hash).
+		Where("token", "=", token).
 		Delete()
 }
 
-func (r *Repository) UpdateTokenUpdatedAt(ctx context.Context, hash string) error {
+func (r *Repository) UpdateTokenUpdatedAt(ctx context.Context, token string) error {
 	now := time.Now().UTC()
 	return builder.Query(r.db, ctx).
 		Table(userTokensTable).
-		Where("token", "=", hash).
+		Where("token", "=", token).
 		Update(AuthToken{UpdatedAt: now}, "updated_at")
 }
 
