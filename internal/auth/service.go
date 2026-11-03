@@ -57,7 +57,7 @@ func (s *Service) Login(ctx context.Context, telegram, password string) (string,
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash.String), []byte(password)); err != nil {
 		return "", time.Time{}, ErrInvalidCredentials
 	}
-	token, expiresAt, err := s.CreateToken(ctx, user.ID)
+	token, expiresAt, err := s.CreateToken(ctx, user.ID, TokenSourceWeb)
 	if err != nil {
 		return "", time.Time{}, ErrTokenCreation
 	}
@@ -134,7 +134,7 @@ func (s *Service) AttachReferral(ctx context.Context, user User, startParam *str
 	}, startParam)
 }
 
-func (s *Service) CreateToken(ctx context.Context, userID int64) (string, time.Time, error) {
+func (s *Service) CreateToken(ctx context.Context, userID int64, source TokenSource) (string, time.Time, error) {
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {
 		return "", time.Time{}, err
@@ -143,7 +143,7 @@ func (s *Service) CreateToken(ctx context.Context, userID int64) (string, time.T
 	hash := sha256.Sum256([]byte(token))
 	storedHash := hex.EncodeToString(hash[:])
 	expiresAt := time.Now().UTC().Add(30 * 24 * time.Hour)
-	if err := s.repo.CreateToken(ctx, userID, storedHash, expiresAt); err != nil {
+	if err := s.repo.CreateToken(ctx, userID, storedHash, expiresAt, source); err != nil {
 		return "", time.Time{}, err
 	}
 	return token, expiresAt, nil

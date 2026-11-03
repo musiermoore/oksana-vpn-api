@@ -147,13 +147,14 @@ func (r *Repository) FindByTelegramID(ctx context.Context, id string) (User, err
 	return user, err
 }
 
-func (r *Repository) CreateToken(ctx context.Context, userID int64, hash string, expiresAt time.Time) error {
+func (r *Repository) CreateToken(ctx context.Context, userID int64, hash string, expiresAt time.Time, source TokenSource) error {
 	now := time.Now().UTC()
 	return builder.Query(r.db, ctx).
 		Table(authTokensTable).
 		Insert(AuthToken{
 			TokenHash:  hash,
 			UserID:     userID,
+			Source:     source,
 			ExpiresAt:  expiresAt.UTC(),
 			LastUsedAt: now,
 			CreatedAt:  now,

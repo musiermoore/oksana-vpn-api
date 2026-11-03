@@ -50,7 +50,7 @@ func (h *Handler) Telegram(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to process referral"})
 		return
 	}
-	token, expiresAt, err := h.service.CreateToken(c.Request.Context(), user.ID)
+	token, expiresAt, err := h.service.CreateToken(c.Request.Context(), user.ID, TokenSourceTelegram)
 	if err != nil {
 		_ = c.Error(err)
 		log.Printf("telegram token creation error: %v", err)
@@ -59,6 +59,7 @@ func (h *Handler) Telegram(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"token":       token,
+		"source":      TokenSourceTelegram,
 		"expires_at":  expiresAt,
 		"id":          user.ID,
 		"name":        user.Name,

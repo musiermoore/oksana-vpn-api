@@ -135,7 +135,7 @@ type fakeTokenIssuer struct {
 	userID  int64
 }
 
-func (i *fakeTokenIssuer) CreateToken(_ context.Context, id int64) (string, time.Time, error) {
+func (i *fakeTokenIssuer) CreateToken(_ context.Context, id int64, _ TokenSource) (string, time.Time, error) {
 	i.userID = id
 	return i.token, i.expires, nil
 }

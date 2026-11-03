@@ -6,7 +6,14 @@ import (
 )
 
 const usersTable = "users"
-const authTokensTable = "telegram_app_tokens"
+const authTokensTable = "auth_tokens"
+
+type TokenSource string
+
+const (
+	TokenSourceTelegram TokenSource = "telegram"
+	TokenSourceWeb      TokenSource = "web"
+)
 
 // User contains only the fields needed to log in and attach a referral.
 type User struct {
@@ -33,10 +40,11 @@ type TelegramOIDCTransaction struct {
 }
 
 type AuthToken struct {
-	TokenHash  string    `db:"token_hash"`
-	UserID     int64     `db:"user_id"`
-	ExpiresAt  time.Time `db:"expires_at"`
-	LastUsedAt time.Time `db:"last_used_at"`
-	CreatedAt  time.Time `db:"created_at"`
-	UpdatedAt  time.Time `db:"updated_at"`
+	TokenHash  string      `db:"token_hash"`
+	UserID     int64       `db:"user_id"`
+	Source     TokenSource `db:"source"`
+	ExpiresAt  time.Time   `db:"expires_at"`
+	LastUsedAt time.Time   `db:"last_used_at"`
+	CreatedAt  time.Time   `db:"created_at"`
+	UpdatedAt  time.Time   `db:"updated_at"`
 }

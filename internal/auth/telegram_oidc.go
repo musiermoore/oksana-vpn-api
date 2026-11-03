@@ -213,12 +213,12 @@ func (h *TelegramOIDCHandler) Exchange(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "unable to establish session"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"access_token": token, "token_type": "Bearer", "expires_at": expiresAt})
+	c.JSON(http.StatusOK, gin.H{"access_token": token, "token_type": "Bearer", "expires_at": expiresAt, "source": TokenSourceWeb})
 }
 
 type telegramOIDCFlow struct {
 	issuer interface {
-		CreateToken(context.Context, int64) (string, time.Time, error)
+		CreateToken(context.Context, int64, TokenSource) (string, time.Time, error)
 	}
 	config    TelegramOIDCConfig
 	store     telegramOIDCStore
@@ -316,7 +316,7 @@ func (f *telegramOIDCFlow) exchangeTicket(ctx context.Context, ticket string) (s
 	if err != nil {
 		return "", time.Time{}, ErrOIDCTicket
 	}
-	return f.issuer.CreateToken(ctx, userID)
+	return f.issuer.CreateToken(ctx, userID, TokenSourceWeb)
 }
 
 func randomURLSafe(size int) (string, error) {
