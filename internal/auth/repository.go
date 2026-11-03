@@ -150,15 +150,14 @@ func (r *Repository) FindByTelegramID(ctx context.Context, id string) (User, err
 func (r *Repository) CreateToken(ctx context.Context, userID int64, hash string, expiresAt time.Time, source TokenSource) error {
 	now := time.Now().UTC()
 	return builder.Query(r.db, ctx).
-		Table(authTokensTable).
+		Table(userTokensTable).
 		Insert(AuthToken{
-			TokenHash:  hash,
-			UserID:     userID,
-			Source:     source,
-			ExpiresAt:  expiresAt.UTC(),
-			LastUsedAt: now,
-			CreatedAt:  now,
-			UpdatedAt:  now,
+			Token:     hash,
+			UserID:    userID,
+			Source:    source,
+			ExpiresAt: expiresAt.UTC(),
+			CreatedAt: now,
+			UpdatedAt: now,
 		})
 }
 
@@ -167,10 +166,10 @@ func (r *Repository) FindUserIDByToken(ctx context.Context, hash string) (int64,
 		ID int64 `db:"id"`
 	}
 	err := builder.Query(r.db, ctx).
-		Table(authTokensTable+" t").
+		Table(userTokensTable+" t").
 		Select("u.id").
 		InnerJoin(usersTable+" u", "u.id", "=", "t.user_id").
-		Where("t.token_hash", "=", hash).
+		Where("t.token", "=", hash).
 		Where("t.expires_at", ">", expression.Raw("UTC_TIMESTAMP(6)")).
 		First(&result)
 	return result.ID, err
@@ -178,20 +177,17 @@ func (r *Repository) FindUserIDByToken(ctx context.Context, hash string) (int64,
 
 func (r *Repository) DeleteToken(ctx context.Context, hash string) error {
 	return builder.Query(r.db, ctx).
-		Table(authTokensTable).
-		Where("token_hash", "=", hash).
+		Table(userTokensTable).
+		Where("token", "=", hash).
 		Delete()
 }
 
-func (r *Repository) UpdateLastUsedAt(ctx context.Context, hash string) error {
+func (r *Repository) UpdateTokenUpdatedAt(ctx context.Context, hash string) error {
 	now := time.Now().UTC()
 	return builder.Query(r.db, ctx).
-		Table(authTokensTable).
-		Where("token_hash", "=", hash).
-		Update(AuthToken{
-			LastUsedAt: now,
-			UpdatedAt:  now,
-		}, "last_used_at", "updated_at")
+		Table(userTokensTable).
+		Where("token", "=", hash).
+		Update(AuthToken{UpdatedAt: now}, "updated_at")
 }
 
 func (r *Repository) CreateOIDCTransaction(ctx context.Context, stateHash string, tx oidcTransaction) error {

@@ -6,7 +6,7 @@ import (
 )
 
 const usersTable = "users"
-const authTokensTable = "auth_tokens"
+const userTokensTable = "user_tokens"
 
 type TokenSource string
 
@@ -40,11 +40,10 @@ type TelegramOIDCTransaction struct {
 }
 
 type AuthToken struct {
-	TokenHash  string      `db:"token_hash"`
-	UserID     int64       `db:"user_id"`
-	Source     TokenSource `db:"source"`
-	ExpiresAt  time.Time   `db:"expires_at"`
-	LastUsedAt time.Time   `db:"last_used_at"`
-	CreatedAt  time.Time   `db:"created_at"`
-	UpdatedAt  time.Time   `db:"updated_at"`
+	Token     string      `db:"token"`
+	UserID    int64       `db:"user_id"`
+	Source    TokenSource `db:"source"`
+	ExpiresAt time.Time   `db:"expires_at"`
+	CreatedAt time.Time   `db:"created_at"`
+	UpdatedAt time.Time   `db:"updated_at"`
 }

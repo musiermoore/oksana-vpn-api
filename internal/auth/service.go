@@ -92,8 +92,8 @@ func (s *Service) Authenticate(ctx context.Context, token string) (int64, error)
 	if err != nil {
 		return 0, err
 	}
-	if err := s.repo.UpdateLastUsedAt(ctx, hash); err != nil {
-		log.Printf("WARNING: last_used_at failed to update: %v", err)
+	if err := s.repo.UpdateTokenUpdatedAt(ctx, hash); err != nil {
+		log.Printf("WARNING: token updated_at failed to update: %v", err)
 	}
 	return userID, nil
 }
