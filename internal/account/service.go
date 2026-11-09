@@ -34,6 +34,7 @@ func (s *Service) GetProfile(ctx context.Context, userID int64) (Profile, error)
 		ID:                               user.ID,
 		UUID:                             *user.UUID,
 		Name:                             user.Name,
+		Login:                            user.Login,
 		Telegram:                         user.Telegram,
 		TelegramID:                       user.TelegramID,
 		Balance:                          user.Balance,

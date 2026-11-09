@@ -18,6 +18,7 @@ type profileRow struct {
 	ID                                 int64      `db:"id"`
 	UUID                               *string    `db:"uuid"`
 	Name                               string     `db:"name"`
+	Login                              *string    `db:"login"`
 	Telegram                           *string    `db:"telegram"`
 	TelegramID                         *string    `db:"telegram_id"`
 	Balance                            float64    `db:"balance"`
@@ -61,6 +62,7 @@ func (r *Repository) FindByID(ctx context.Context, id int64) (profileRow, error)
 			"u.id",
 			"u.uuid",
 			"u.name",
+			"u.login",
 			"u.telegram",
 			"u.telegram_id",
 			"u.balance",

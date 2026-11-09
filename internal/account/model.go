@@ -11,6 +11,7 @@ type Profile struct {
 	ID                               int64              `json:"id"`
 	UUID                             string             `json:"uuid"`
 	Name                             string             `json:"name"`
+	Login                            *string            `json:"login"`
 	Telegram                         *string            `json:"telegram"`
 	TelegramID                       *string            `json:"telegram_id"`
 	Balance                          float64            `json:"balance"`
