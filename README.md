@@ -11,6 +11,7 @@
 | `internal/account` | Load and return the authenticated user's `/me` profile. |
 | `internal/referral` | Referral rules, summary, and persistence. |
 | `internal/telegram` | Parse and verify Telegram init data. |
+| `internal/configs/vless` | Authenticated VLESS deep-link endpoint for the Mini App. |
 | `internal/database` | MySQL connection and the existing SQL builder. |
 
 Organize new code by feature. A feature package may contain several models and files; it does not need a package per table or endpoint. Keep HTTP request and response types near their handlers, and keep database row types in repositories. Pass only the facts another feature needs. For example, `referral.Participant` carries the user fields required by referral rules without importing the auth or account model.
@@ -29,6 +30,8 @@ OIDC identities are stored by the verified Telegram OIDC `sub` claim. The signed
 Configure `TELEGRAM_OIDC_CLIENT_ID`, `TELEGRAM_OIDC_CLIENT_SECRET`, `TELEGRAM_OIDC_REDIRECT_URI`, and `TELEGRAM_OIDC_FRONTEND_RETURN_URLS` in the API environment. Return URLs are exact-match allowlisted HTTPS URLs; the callback URI must also be HTTPS. If these values are incomplete, the OIDC endpoints return `503` and do not start login. Apply the OIDC migration before enabling the flow. Telegram's `@BotFather` Login Widget settings must allow the SPA origin and the exact API callback URI, and its issued client ID and secret must be configured only on the backend.
 
 The SPA must implement the ticket-fragment exchange to establish its bearer-token session. This backend change does not alter the Vue application.
+
+`GET /api/v1/vless/link` returns only `happ_deep_link`, `incy_deep_link`, `v2raytun_deep_link`, and `show_raw_link`. The last field is always `false`. The three links use the authenticated user's UUID and `VLESS_PUBLIC_DOMAIN` (default `https://connect.oksana1984.ru`).
 
 Authenticated users can set a standalone login and password with `PUT /api/v1/auth/credentials` and a bearer access token:
 

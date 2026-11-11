@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/musiermoore/oksana-vpn-api/internal/account"
 	"github.com/musiermoore/oksana-vpn-api/internal/auth"
+	"github.com/musiermoore/oksana-vpn-api/internal/configs/vless"
 	"github.com/musiermoore/oksana-vpn-api/internal/telegramdev"
 )
 
@@ -88,5 +89,7 @@ func NewRouterWithOIDC(
 	protected.GET("/me", accountHandler.Me)
 	protected.POST("/logout", authHandler.Logout)
 	protected.PUT("/credentials", authHandler.SetCredentials)
+
+	vless.NewHandler(db).RegisterRoutes(r, auth.RequireAuth(authService))
 	return r
 }

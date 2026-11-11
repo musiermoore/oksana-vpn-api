@@ -24,6 +24,8 @@ func TestRoutesKeepExistingPathsAndProtection(t *testing.T) {
 		"POST /api/v1/auth/telegram/oidc/exchange": true,
 		"GET /api/v1/auth/me":                      true,
 		"POST /api/v1/auth/logout":                 true,
+		"PUT /api/v1/auth/credentials":             true,
+		"GET /api/v1/vless/link":                   true,
 	}
 	for _, route := range router.Routes() {
 		key := route.Method + " " + route.Path
@@ -36,7 +38,7 @@ func TestRoutesKeepExistingPathsAndProtection(t *testing.T) {
 		t.Errorf("missing route %s", route)
 	}
 
-	for _, path := range []string{"/api/v1/auth/me", "/api/v1/auth/logout"} {
+	for _, path := range []string{"/api/v1/auth/me", "/api/v1/auth/logout", "/api/v1/vless/link"} {
 		method := http.MethodGet
 		if path == "/api/v1/auth/logout" {
 			method = http.MethodPost

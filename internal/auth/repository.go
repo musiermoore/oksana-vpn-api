@@ -162,18 +162,29 @@ func (r *Repository) CreateToken(ctx context.Context, userID int64, hash string,
 		})
 }
 
-func (r *Repository) FindUserIDByToken(ctx context.Context, hash string) (int64, error) {
-	var result struct {
-		ID int64 `db:"id"`
-	}
+func (r *Repository) FindUserByToken(ctx context.Context, hash string) (User, error) {
+	var user User
 	err := builder.Query(r.db, ctx).
 		Table(authTokensTable+" t").
-		Select("u.id").
+		Select("u.id", "u.uuid").
 		InnerJoin(usersTable+" u", "u.id", "=", "t.user_id").
 		Where("t.token_hash", "=", hash).
 		Where("t.expires_at", ">", expression.Raw("UTC_TIMESTAMP(6)")).
-		First(&result)
-	return result.ID, err
+		First(&user)
+	return user, err
+}
+
+func (r *Repository) EnsureUUID(ctx context.Context, userID int64) error {
+	var user User
+	if err := builder.Query(r.db, ctx).
+		Table(usersTable).
+		Select("id", "uuid").
+		Where("id", "=", userID).
+		First(&user); err != nil {
+		return err
+	}
+	_, err := r.ensureUUID(ctx, user)
+	return err
 }
 
 func (r *Repository) DeleteToken(ctx context.Context, hash string) error {

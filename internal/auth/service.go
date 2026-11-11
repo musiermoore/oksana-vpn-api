@@ -25,11 +25,28 @@ var (
 )
 
 type Service struct {
-	repo      *Repository
+	repo      repositoryStore
 	referrals *referral.Service
 }
 
-func NewService(repo *Repository, referrals *referral.Service) *Service {
+type repositoryStore interface {
+	FindByTelegram(context.Context, string) (User, error)
+	FindByLogin(context.Context, string) (User, error)
+	SetCredentials(context.Context, int64, string, string) error
+	EnsureUUID(context.Context, int64) error
+	FindUserByToken(context.Context, string) (User, error)
+	UpdateLastUsedAt(context.Context, string) error
+	DeleteToken(context.Context, string) error
+	FindOrCreateByTelegramID(context.Context, string, string, *string) (User, error)
+	CreateToken(context.Context, int64, string, time.Time, TokenSource) error
+	CreateOIDCTransaction(context.Context, string, oidcTransaction) error
+	ConsumeOIDCTransaction(context.Context, string, time.Time) (oidcTransaction, error)
+	ResolveOIDCUser(context.Context, string, string, string, string) (User, error)
+	CreateOIDCLoginTicket(context.Context, string, int64, time.Time) error
+	ConsumeOIDCLoginTicket(context.Context, string, time.Time) (int64, error)
+}
+
+func NewService(repo repositoryStore, referrals *referral.Service) *Service {
 	return &Service{repo: repo, referrals: referrals}
 }
 
@@ -85,17 +102,22 @@ func (s *Service) Authenticate(ctx context.Context, token string) (int64, error)
 	if err != nil {
 		return 0, err
 	}
-	userID, err := s.repo.FindUserIDByToken(ctx, hash)
+	user, err := s.repo.FindUserByToken(ctx, hash)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, ErrInvalidToken
 	}
 	if err != nil {
 		return 0, err
 	}
+	if user.UUID == nil || strings.TrimSpace(*user.UUID) == "" {
+		if err := s.repo.EnsureUUID(ctx, user.ID); err != nil {
+			return 0, err
+		}
+	}
 	if err := s.repo.UpdateLastUsedAt(ctx, hash); err != nil {
 		log.Printf("WARNING: last_used_at failed to update: %v", err)
 	}
-	return userID, nil
+	return user.ID, nil
 }
 
 func (s *Service) Logout(ctx context.Context, token string) error {
@@ -135,6 +157,10 @@ func (s *Service) AttachReferral(ctx context.Context, user User, startParam *str
 }
 
 func (s *Service) CreateToken(ctx context.Context, userID int64, source TokenSource) (string, time.Time, error) {
+	if err := s.repo.EnsureUUID(ctx, userID); err != nil {
+		return "", time.Time{}, err
+	}
+
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {
 		return "", time.Time{}, err
