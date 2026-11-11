@@ -14,9 +14,13 @@ type Repository struct {
 }
 
 type linkUser struct {
-	UUID              string `db:"uuid"`
-	IsHealthCheckUser bool   `db:"is_health_check_user"`
+	UUID              string       `db:"uuid"`
+	IsHealthCheckUser sql.NullBool `db:"is_health_check_user"`
 	HasAccess         bool
+}
+
+func (user linkUser) isHealthCheckAccount() bool {
+	return user.IsHealthCheckUser.Valid && user.IsHealthCheckUser.Bool
 }
 
 func NewRepository(db *sql.DB) *Repository {
@@ -36,7 +40,7 @@ func (r *Repository) FindByID(ctx context.Context, userID int64) (linkUser, erro
 		return user, err
 	}
 
-	if user.IsHealthCheckUser {
+	if user.isHealthCheckAccount() {
 		user.HasAccess = true
 		return user, nil
 	}
