@@ -39,7 +39,6 @@ func NewRouterWithOIDC(
 	r.Use(gin.Logger(), reportExceptions(notifier))
 	allowOrigins := []string{
 		"https://panel.oksana1984.ru",
-		"https://public.oksana1984.ru",
 		"https://oksana1984.ru",
 	}
 	if oidcHandler != nil {
