@@ -237,7 +237,7 @@ func newTelegramOIDCFlow(service *Service, config TelegramOIDCConfig) *telegramO
 }
 
 func (f *telegramOIDCFlow) allowedReturnURL(candidate string) (string, bool) {
-	if candidate == "" && len(f.config.ReturnURLs) == 1 {
+	if candidate == "" && len(f.config.ReturnURLs) > 0 {
 		candidate = f.config.ReturnURLs[0]
 	}
 	for _, allowed := range f.config.ReturnURLs {

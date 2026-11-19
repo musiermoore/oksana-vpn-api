@@ -20,7 +20,7 @@ Organize new code by feature. A feature package may contain several models and f
 
 `POST /api/v1/auth/telegram` remains the Telegram Mini App login and accepts its existing `init_data` request. Browser login uses the separate OIDC Authorization Code flow:
 
-1. Open `GET /api/v1/auth/telegram/oidc/start`. If several frontend return URLs are configured, pass the exact allowed URL as `return_url`.
+1. Open `GET /api/v1/auth/telegram/oidc/start`. Browser login omits `return_url` and uses the first URL in `TELEGRAM_OIDC_FRONTEND_RETURN_URLS`. Desktop login passes the full `/login?desktop=1` URL as `return_url`, which must exactly match an entry in the list.
 2. Telegram returns to `GET /api/v1/auth/telegram/oidc/callback`. The API validates state, PKCE, and Telegram's ID token before provisioning or finding the account.
 3. The callback redirects to the approved frontend URL with a short-lived, single-use `telegram_oidc_ticket` in the URL fragment. The SPA reads and removes the fragment, then posts `{"ticket":"..."}` to `POST /api/v1/auth/telegram/oidc/exchange`.
 4. Ticket exchange returns the normal `access_token`, `token_type`, and `expires_at` JSON response. The access token is never put in a URL.

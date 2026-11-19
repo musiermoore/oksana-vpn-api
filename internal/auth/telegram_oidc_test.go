@@ -140,6 +140,48 @@ func (i *fakeTokenIssuer) CreateToken(_ context.Context, id int64, _ TokenSource
 	return i.token, i.expires, nil
 }
 
+func TestTelegramOIDCStartReturnURL(t *testing.T) {
+	const browserURL = "https://oksana1984.ru/login"
+	const desktopURL = browserURL + "?desktop=1"
+	for _, tc := range []struct {
+		name   string
+		query  string
+		want   string
+		status int
+	}{
+		{"browser default", "", browserURL, http.StatusFound},
+		{"explicit desktop", "?return_url=" + url.QueryEscape(desktopURL), desktopURL, http.StatusFound},
+		{"unlisted destination", "?return_url=" + url.QueryEscape(browserURL+"?desktop=2"), "", http.StatusBadRequest},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store := newFakeOIDCStore()
+			handler := &TelegramOIDCHandler{flow: &telegramOIDCFlow{
+				config: TelegramOIDCConfig{ReturnURLs: []string{browserURL, desktopURL}},
+				store:  store,
+			}}
+			recorder := httptest.NewRecorder()
+			handler.Start(ginContext(recorder, http.MethodGet, "/api/v1/auth/telegram/oidc/start"+tc.query, nil))
+			if recorder.Code != tc.status {
+				t.Fatalf("status = %d, want %d", recorder.Code, tc.status)
+			}
+			if tc.status == http.StatusBadRequest {
+				if len(store.txns) != 0 {
+					t.Fatal("rejected return URL created a login transaction")
+				}
+				return
+			}
+			location, err := recorder.Result().Location()
+			if err != nil {
+				t.Fatal(err)
+			}
+			tx := store.txns[sha256Hex(location.Query().Get("state"))]
+			if tx.ReturnURL != tc.want {
+				t.Errorf("transaction return URL = %q, want %q", tx.ReturnURL, tc.want)
+			}
+		})
+	}
+}
+
 func TestTelegramOIDCLoginProvisionAndTicketExchange(t *testing.T) {
 	store := newFakeOIDCStore()
 	exchanger := &fakeOIDCExchange{token: "signed-id-token"}
